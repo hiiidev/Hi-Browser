@@ -253,6 +253,15 @@ export function BrowserListSettingsModal({
             placeholder="启动 URL"
           />
         </FormItem>
+        <FormItem label="轻启动模式" hint="先起空白页，实例就绪后再打开默认页面">
+          <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
+            <span className="text-sm text-[var(--color-text-primary)]">延后打开启动页</span>
+            <Switch
+              checked={settings.lightStartEnabled}
+              onChange={(checked) => onSettingsChange({ lightStartEnabled: checked })}
+            />
+          </div>
+        </FormItem>
         <FormItem label="恢复上次关闭的标签页" hint="关闭后只打开默认启动页或空白页">
           <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
             <div>

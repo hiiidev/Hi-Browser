@@ -52,3 +52,31 @@ func TestClearSessionRestoreDataRemovesSessionArtifactsOnly(t *testing.T) {
 		t.Fatalf("Preferences 不应被删除: %v", err)
 	}
 }
+func TestClearSessionRestoreDataSkipsMissingProfileDir(t *testing.T) {
+	t.Parallel()
+
+	userDataDir := t.TempDir()
+	if err := ClearSessionRestoreData(userDataDir); err != nil {
+		t.Fatalf("ClearSessionRestoreData 返回错误: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(userDataDir, "Default")); !os.IsNotExist(err) {
+		t.Fatalf("缺少会话数据时不应创建 Default 目录: err=%v", err)
+	}
+}
+
+func TestClearSessionRestoreDataDoesNotCreateMissingSessionsDir(t *testing.T) {
+	t.Parallel()
+
+	userDataDir := t.TempDir()
+	profileDir := filepath.Join(userDataDir, "Default")
+	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+		t.Fatalf("创建 profile 目录失败: %v", err)
+	}
+
+	if err := ClearSessionRestoreData(userDataDir); err != nil {
+		t.Fatalf("ClearSessionRestoreData 返回错误: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(profileDir, "Sessions")); !os.IsNotExist(err) {
+		t.Fatalf("缺少会话数据时不应创建 Sessions 目录: err=%v", err)
+	}
+}

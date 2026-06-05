@@ -2,6 +2,7 @@ import {
   exportAutomationScript,
   importAutomationScript,
   loadAutomationScripts,
+  normalizeAutomationScriptPublicAPIConfig,
   normalizeAutomationScriptRecordPayload,
   normalizeAutomationScriptTargetConfig,
   saveAutomationScripts,
@@ -47,6 +48,7 @@ function normalizeAutomationScriptRecord(payload: any): AutomationScriptRecord {
     scriptText: String(payload?.scriptText || ""),
     notes: String(payload?.notes || ""),
     targetConfig: normalizeAutomationScriptTargetConfig(payload?.targetConfig),
+    publicAPI: normalizeAutomationScriptPublicAPIConfig(payload?.publicAPI),
     source: {
       type: String(payload?.source?.type || ""),
       uri: String(payload?.source?.uri || ""),
@@ -97,6 +99,46 @@ export interface AutomationScriptExportResult {
   fileCount: number;
 }
 
+export interface AutomationScriptImportIssue {
+  path: string;
+  message: string;
+}
+
+export interface AutomationScriptBatchImportResult {
+  imported: AutomationScriptRecord[];
+  failed: AutomationScriptImportIssue[];
+  scanned: number;
+}
+
+export interface AutomationScriptPublicApiInvokeInput {
+  url: string;
+  method?: string;
+  bodyText?: string;
+  apiKey?: string;
+  authHeader?: string;
+  timeoutMs?: number;
+}
+
+export interface AutomationScriptPublicApiInvokeResult {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  bodyText: string;
+  bodyJson: unknown | null;
+}
+
+function normalizeAutomationScriptPublicApiInvokeResult(
+  payload: any,
+): AutomationScriptPublicApiInvokeResult {
+  return {
+    ok: payload?.ok === true,
+    status: Number(payload?.status) || 0,
+    statusText: String(payload?.statusText || ""),
+    bodyText: String(payload?.bodyText || ""),
+    bodyJson: payload?.bodyJson ?? null,
+  };
+}
+
 function normalizeAutomationScriptRunInput(
   input: string | AutomationScriptRunInput,
 ): AutomationScriptRunInput {
@@ -104,6 +146,7 @@ function normalizeAutomationScriptRunInput(
     return {
       scriptId: input,
       selectorText: "",
+      targetInput: {},
       paramsText: "",
       useScriptSelector: true,
       useScriptParams: true,
@@ -116,6 +159,10 @@ function normalizeAutomationScriptRunInput(
   return {
     scriptId: String(input?.scriptId || ""),
     selectorText: String(input?.selectorText || ""),
+    targetInput:
+      input?.targetInput && typeof input.targetInput === "object"
+        ? { ...input.targetInput }
+        : {},
     paramsText: String(input?.paramsText || ""),
     useScriptSelector: input?.useScriptSelector !== false,
     useScriptParams: input?.useScriptParams !== false,
@@ -253,6 +300,46 @@ export async function importAutomationScriptFromLocalDirectory(): Promise<Automa
   }
 
   throw new Error("当前环境不支持本地目录导入");
+}
+
+function normalizeAutomationScriptBatchImportResult(
+  payload: any,
+): AutomationScriptBatchImportResult {
+  const imported = Array.isArray(payload?.imported)
+    ? payload.imported.map(normalizeAutomationScriptRecord)
+    : [];
+
+  return {
+    imported,
+    failed: Array.isArray(payload?.failed)
+      ? payload.failed.map((item: any) => ({
+          path: String(item?.path || ""),
+          message: String(item?.message || ""),
+        }))
+      : [],
+    scanned:
+      Number.isFinite(Number(payload?.scanned)) && Number(payload.scanned) > 0
+        ? Math.round(Number(payload.scanned))
+        : imported.length,
+  };
+}
+
+export async function importAutomationScriptFromLocalLibrary(): Promise<AutomationScriptBatchImportResult> {
+  const bindings: any = await getBindings();
+  if (bindings?.AutomationScriptImportLocalLibrary) {
+    return normalizeAutomationScriptBatchImportResult(
+      await bindings.AutomationScriptImportLocalLibrary(),
+    );
+  }
+
+  const goApp = (window as any).go?.main?.App;
+  if (typeof goApp?.AutomationScriptImportLocalLibrary === "function") {
+    return normalizeAutomationScriptBatchImportResult(
+      await goApp.AutomationScriptImportLocalLibrary(),
+    );
+  }
+
+  throw new Error("当前环境不支持本地脚本库导入");
 }
 
 export async function importAutomationScriptFromRemote(url: string): Promise<AutomationScriptRecord> {
@@ -554,4 +641,80 @@ export async function fetchAutomationScriptRuns(
   }
 
   return [];
+}
+
+export async function invokeAutomationScriptPublicApi(
+  input: AutomationScriptPublicApiInvokeInput,
+): Promise<AutomationScriptPublicApiInvokeResult> {
+  const url = String(input?.url || "").trim();
+  if (!url) {
+    throw new Error("接口地址不能为空");
+  }
+
+  const method = String(input?.method || "POST").trim().toUpperCase() || "POST";
+  const authHeader = String(input?.authHeader || "X-Ant-Api-Key").trim() || "X-Ant-Api-Key";
+  const apiKey = String(input?.apiKey || "").trim();
+  const bodyText = String(input?.bodyText || "").trim();
+  const timeoutMs = Number.isFinite(Number(input?.timeoutMs))
+    ? Math.max(1000, Math.round(Number(input?.timeoutMs)))
+    : 0;
+
+  const bindings: any = await getBindings();
+  if (bindings?.AutomationScriptInvokePublicAPI) {
+    return normalizeAutomationScriptPublicApiInvokeResult(
+      await bindings.AutomationScriptInvokePublicAPI({
+        url,
+        method,
+        bodyText,
+        apiKey,
+        authHeader,
+        timeoutMs,
+      }),
+    );
+  }
+
+  const goApp = (window as any).go?.main?.App;
+  if (typeof goApp?.AutomationScriptInvokePublicAPI === "function") {
+    return normalizeAutomationScriptPublicApiInvokeResult(
+      await goApp.AutomationScriptInvokePublicAPI({
+        url,
+        method,
+        bodyText,
+        apiKey,
+        authHeader,
+        timeoutMs,
+      }),
+    );
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) {
+    headers[authHeader] = apiKey;
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: bodyText || "{}",
+  });
+
+  const rawText = await response.text();
+  let bodyJson: unknown | null = null;
+  if (rawText.trim()) {
+    try {
+      bodyJson = JSON.parse(rawText);
+    } catch {
+      bodyJson = null;
+    }
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    bodyText: rawText,
+    bodyJson,
+  };
 }

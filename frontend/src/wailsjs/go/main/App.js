@@ -62,12 +62,20 @@ export function AutomationScriptImportLocalFile() {
   return window['go']['main']['App']['AutomationScriptImportLocalFile']();
 }
 
+export function AutomationScriptImportLocalLibrary() {
+  return window['go']['main']['App']['AutomationScriptImportLocalLibrary']();
+}
+
 export function AutomationScriptImportRemote(arg1) {
   return window['go']['main']['App']['AutomationScriptImportRemote'](arg1);
 }
 
 export function AutomationScriptImportText(arg1) {
   return window['go']['main']['App']['AutomationScriptImportText'](arg1);
+}
+
+export function AutomationScriptInvokePublicAPI(arg1) {
+  return window['go']['main']['App']['AutomationScriptInvokePublicAPI'](arg1);
 }
 
 export function AutomationScriptList() {
@@ -224,6 +232,14 @@ export function BrowserProfileBatchSetTags(arg1, arg2, arg3) {
 
 export function BrowserProfileCopy(arg1, arg2) {
   return window['go']['main']['App']['BrowserProfileCopy'](arg1, arg2);
+}
+
+export function BrowserProfileCopyWithMode(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowserProfileCopyWithMode'](arg1, arg2, arg3);
+}
+
+export function BrowserProfileCopyWithOptions(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowserProfileCopyWithOptions'](arg1, arg2, arg3);
 }
 
 export function BrowserProfileCreate(arg1) {

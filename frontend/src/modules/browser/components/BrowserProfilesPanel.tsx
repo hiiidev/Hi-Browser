@@ -237,9 +237,10 @@ export function BrowserProfilesPanel({
     {
       key: 'profileName',
       title: '实例名称',
+      width: 320,
       render: (value, record) => (
-        <div className="flex flex-col gap-1">
-          <Link className="text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`}>
+        <div className="flex min-w-[260px] flex-col gap-1">
+          <Link className="block truncate whitespace-nowrap text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`} title={String(value || '')}>
             {value}
           </Link>
           {record.tags && record.tags.length > 0 && (
@@ -291,6 +292,7 @@ export function BrowserProfilesPanel({
     {
       key: 'actions',
       title: '操作',
+      width: 252,
       align: 'right',
       render: (_, record) => {
         const isStarting = isProfileStarting(record.profileId)
@@ -298,7 +300,7 @@ export function BrowserProfilesPanel({
         const isBusy = isProfileBusy(record.profileId)
 
         return (
-          <div className="flex justify-end gap-1">
+          <div className="flex justify-end gap-1 whitespace-nowrap">
             {record.running ? (
               <Button size="sm" variant="secondary" onClick={() => onStop(record.profileId)} title="停止" loading={isStopping}>
                 {!isStopping && <Square className="w-3.5 h-3.5" />}
@@ -333,27 +335,28 @@ export function BrowserProfilesPanel({
             rowKey="profileId"
           />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[500px] p-4 items-start content-start">
+          <div className="flex flex-wrap gap-4 min-h-[500px] p-4 items-start content-start">
             {profiles.map((profile) => (
-              <BrowserProfileCard
-                key={profile.profileId}
-                profile={profile}
-                proxy={proxies.find(item => item.proxyId === profile.proxyId)}
-                isSelected={selectedIds.has(profile.profileId)}
-                status={getProfileStatus(profile)}
-                coreLabel={resolveProfileCore(profile)?.coreName || getProfileCoreLabel(profile)}
-                isStarting={isProfileStarting(profile.profileId)}
-                isStopping={isProfileStopping(profile.profileId)}
-                isBusy={isProfileBusy(profile.profileId)}
-                onToggleSelect={onToggleSelect}
-                onRefreshProfiles={onRefreshProfiles}
-                onStart={onStart}
-                onStop={onStop}
-                onRestart={onRestart}
-                onOpenKeywords={onOpenKeywords}
-                onOpenCopy={onOpenCopy}
-                onDelete={onDelete}
-              />
+              <div key={profile.profileId} className="min-w-[360px] max-w-[560px] flex-[1_1_440px]">
+                <BrowserProfileCard
+                  profile={profile}
+                  proxy={proxies.find(item => item.proxyId === profile.proxyId)}
+                  isSelected={selectedIds.has(profile.profileId)}
+                  status={getProfileStatus(profile)}
+                  coreLabel={resolveProfileCore(profile)?.coreName || getProfileCoreLabel(profile)}
+                  isStarting={isProfileStarting(profile.profileId)}
+                  isStopping={isProfileStopping(profile.profileId)}
+                  isBusy={isProfileBusy(profile.profileId)}
+                  onToggleSelect={onToggleSelect}
+                  onRefreshProfiles={onRefreshProfiles}
+                  onStart={onStart}
+                  onStop={onStop}
+                  onRestart={onRestart}
+                  onOpenKeywords={onOpenKeywords}
+                  onOpenCopy={onOpenCopy}
+                  onDelete={onDelete}
+                />
+              </div>
             ))}
           </div>
         )}

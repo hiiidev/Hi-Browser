@@ -71,6 +71,7 @@ type AutomationConfig struct {
 	HeadlessDefault       bool   `yaml:"headless_default,omitempty"`
 	KeepRuntimeOnDisable  bool   `yaml:"keep_runtime_on_disable,omitempty"`
 	AllowTypeScriptBuild  bool   `yaml:"allow_typescript_build,omitempty"`
+	ArtifactsDir          string `yaml:"artifacts_dir,omitempty"`
 	NodeSource            string `yaml:"node_source,omitempty"`
 	SystemNodePath        string `yaml:"system_node_path,omitempty"`
 	NodeVersion           string `yaml:"node_version,omitempty"`
@@ -145,6 +146,7 @@ type BrowserConfig struct {
 	DefaultFingerprintArgs []string               `yaml:"default_fingerprint_args"`
 	DefaultLaunchArgs      []string               `yaml:"default_launch_args"`
 	DefaultStartURLs       []string               `yaml:"default_start_urls"`
+	LightStartEnabled      *bool                  `yaml:"light_start_enabled,omitempty"`
 	RestoreLastSession     bool                   `yaml:"restore_last_session"`
 	StartReadyTimeoutMs    int                    `yaml:"start_ready_timeout_ms,omitempty"`
 	StartStableWindowMs    int                    `yaml:"start_stable_window_ms,omitempty"`

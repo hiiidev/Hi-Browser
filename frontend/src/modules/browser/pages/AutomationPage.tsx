@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useState,
   type KeyboardEvent,
@@ -6,8 +6,12 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Link,
+  Pencil,
+  Play,
   History,
   PlusSquare,
+  RefreshCw,
   Upload,
   Wrench,
 } from "lucide-react";
@@ -21,6 +25,7 @@ import {
   toast,
 } from "../../../shared/components";
 import { AutomationScriptHistoryModal } from "../components/AutomationScriptHistoryModal";
+import { AutomationScriptPublicApiModal } from "../components/AutomationScriptPublicApiModal";
 import { AutomationScriptRunModal } from "../components/AutomationScriptRunModal";
 import { AutomationToolboxModal } from "../components/AutomationToolboxModal";
 import { fetchBrowserProfiles } from "../api";
@@ -29,6 +34,7 @@ import {
   importAutomationScriptFromGit,
   importAutomationScriptFromLocalDirectory,
   importAutomationScriptFromLocalFile,
+  importAutomationScriptFromLocalLibrary,
   importAutomationScriptFromRemote,
   importAutomationScriptFromText,
   saveAutomationScript,
@@ -37,13 +43,22 @@ import {
   AUTOMATION_SCRIPT_TYPE_OPTIONS,
   createAutomationScriptDraft,
   findAutomationTargetProfile,
+  prepareAutomationScriptPublicAPIConfigForSave,
+  resolveAutomationScriptPublicAPIConfig,
+  type AutomationScriptPublicAPIConfig,
   type AutomationScriptRecord,
   type AutomationScriptType,
 } from "../automationScripts";
 import { useLaunchContext } from "../hooks/useLaunchContext";
 import type { BrowserProfile } from "../types";
 
-type ImportMode = "text" | "local-file" | "local-dir" | "remote-url" | "git";
+type ImportMode =
+  | "text"
+  | "local-file"
+  | "local-dir"
+  | "local-library"
+  | "remote-url"
+  | "git";
 const DUAL_INSTANCE_SCRIPT_ID = "dual-instance-runtime-switch";
 const NEWS_SCRIPT_ID = "news-query-txt";
 
@@ -56,6 +71,7 @@ type AutomationCardPresentation = {
   key: string;
   title: string;
   scriptId?: string;
+  scriptType: AutomationScriptType;
   modeLabel: string;
   description: string;
   codeDisplay: string;
@@ -66,7 +82,26 @@ type AutomationCardPresentation = {
   secondaryActionText: string;
   secondaryActionSuccessMessage: string;
   modeToneClass: string;
+  publicAPIEnabled: boolean;
+  railClassName: string;
 };
+
+function getAutomationCardRailClass(seed: string): string {
+  const palette = [
+    "bg-[#8aa0b3]",
+    "bg-[#8da79b]",
+    "bg-[#929ab1]",
+    "bg-[#aa9a8e]",
+    "bg-[#8b9a9c]",
+  ];
+
+  let hash = 0;
+  for (const char of seed) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+
+  return palette[hash % palette.length];
+}
 
 function ScriptCardField({
   label,
@@ -76,11 +111,11 @@ function ScriptCardField({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-muted)] px-3 py-3 shadow-[var(--shadow-sm)]">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
+    <div className="flex min-h-9 items-center gap-2 rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-muted)] px-3 py-2 shadow-[var(--shadow-sm)]">
+      <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
         {label}
       </div>
-      <div className="mt-1.5 flex-1 text-[12px] font-medium leading-4 text-[var(--color-text-primary)]">
+      <div className="min-w-0 flex-1 text-[12px] font-medium leading-4 text-[var(--color-text-primary)]">
         {children}
       </div>
     </div>
@@ -90,24 +125,28 @@ function ScriptCardField({
 function AutomationScriptSummaryCard({
   card,
   onOpen,
-  onRun,
+  onRunScript,
+  onRunAPI,
 }: {
   card: AutomationCardPresentation;
   onOpen?: () => void;
-  onRun?: () => void;
+  onRunScript?: () => void;
+  onRunAPI?: () => void;
 }) {
   const interactive = typeof onOpen === "function";
-  const actionCount = 2 + (interactive ? 1 : 0) + (onRun ? 1 : 0);
-  const headerPrimaryButtonClassName =
-    "!h-8 !w-full whitespace-nowrap !rounded-xl !border !border-[var(--color-accent)] !bg-[var(--color-accent)] !px-2 !text-[11px] !font-semibold !text-[var(--color-text-inverse)] !shadow-[var(--shadow-sm)] hover:!bg-[var(--color-accent-hover)] hover:!border-[var(--color-accent-hover)] focus-visible:!ring-[var(--color-accent)]";
-  const headerSecondaryCopyButtonClassName =
-    "!h-8 !w-full whitespace-nowrap !rounded-xl !border !border-[#cbd5e1] !bg-[#e2e8f0] !px-2 !text-[11px] !font-semibold !text-[#243b63] !shadow-[var(--shadow-sm)] hover:!border-[#b8c4d6] hover:!bg-[#d9e2f1] focus-visible:!ring-[#243b63]";
-  const headerActionGroupClassName =
-    "grid max-w-full flex-shrink-0 gap-1.5";
-  const headerActionButtonClassName =
-    "!h-8 !w-full whitespace-nowrap !rounded-xl !border !border-[#d8c28a] !bg-[#f6e7be] !px-2 !text-[11px] !font-semibold !text-[#6f5314] !shadow-[var(--shadow-sm)] hover:!border-[#cfb575] hover:!bg-[#f1dfad] focus-visible:!ring-[#d8c28a]";
-  const headerRunButtonClassName =
-    "!h-8 !w-full whitespace-nowrap !rounded-xl !border !border-[#166534] !bg-[#166534] !px-2 !text-[11px] !font-semibold !text-white !shadow-[var(--shadow-sm)] hover:!border-[#14532d] hover:!bg-[#14532d] focus-visible:!ring-[#166534]";
+  const isInterfaceModeCard = card.scriptType === "launch-api";
+  const actionButtonClassName =
+    "!h-7 !w-[104px] shrink-0 justify-center whitespace-nowrap !rounded-md !border !border-black !bg-black !px-2.5 !text-xs !font-medium !leading-none !text-white !shadow-none hover:!border-[#1f1f1f] hover:!bg-[#1f1f1f] focus-visible:!ring-black disabled:!border-[#6b7280] disabled:!bg-[#6b7280] disabled:!text-white";
+  const headerCopyButtonClassName =
+    "!h-7 !w-[104px] shrink-0 justify-center whitespace-nowrap !rounded-md !border !border-black !bg-white !px-2.5 !text-xs !font-medium !leading-none !text-black !shadow-none hover:!border-black hover:!bg-[#f3f4f6] hover:!text-black focus-visible:!ring-black disabled:!border-[#6b7280] disabled:!bg-white disabled:!text-[#6b7280]";
+  const scriptButtonClassName =
+    actionButtonClassName;
+  const apiSetupButtonClassName =
+    actionButtonClassName;
+  const interfaceExecuteButtonClassName =
+    actionButtonClassName;
+  const editButtonClassName =
+    actionButtonClassName;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!interactive || !onOpen) {
@@ -125,93 +164,137 @@ function AutomationScriptSummaryCard({
       tabIndex={interactive ? 0 : undefined}
       onClick={interactive ? onOpen : undefined}
       onKeyDown={interactive ? handleKeyDown : undefined}
-      className={`group flex h-full flex-col rounded-[22px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3.5 pb-3 pt-4 text-left shadow-[var(--shadow-xs)] transition-all duration-200 md:h-[194px] ${
+      className={`group relative flex h-full flex-col rounded-[22px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] pb-3 pl-7 pr-3.5 pt-3 text-left shadow-[var(--shadow-xs)] transition-all duration-200 ${
         interactive
           ? "cursor-pointer hover:border-[var(--color-border-strong)] hover:shadow-[var(--shadow-md)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2"
           : ""
       }`}
     >
-      <div className="flex min-h-[64px] flex-col gap-2.5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="min-h-[32px] pt-0.5 text-[16px] font-semibold leading-5 text-[var(--color-text-primary)]">
-              {card.title}
-            </div>
-            <div className="mt-1 truncate text-[13px] leading-5 text-[var(--color-text-secondary)]">
-              {card.description}
-            </div>
-          </div>
+      <div
+        aria-hidden="true"
+        className={`absolute bottom-3 left-3 top-3 w-1 rounded-full ${card.railClassName}`}
+      />
 
-          <div
-            className={headerActionGroupClassName}
-            style={{
-              gridTemplateColumns: `repeat(${actionCount}, minmax(0, 1fr))`,
-              width: `min(100%, ${actionCount * 104}px)`,
-            }}
-          >
-            <Button
-              type="button"
-              size="sm"
-              className={headerPrimaryButtonClassName}
-              onClick={(event) => {
-                event.stopPropagation();
-                void copyToClipboard(
-                  card.primaryActionText,
-                  card.primaryActionSuccessMessage,
-                );
-              }}
-            >
-              {card.primaryActionLabel}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className={headerSecondaryCopyButtonClassName}
-              onClick={(event) => {
-                event.stopPropagation();
-                void copyToClipboard(
-                  card.secondaryActionText,
-                  card.secondaryActionSuccessMessage,
-                );
-              }}
-            >
-              {card.secondaryActionLabel}
-            </Button>
-            {interactive ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className={headerActionButtonClassName}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpen();
-                }}
-              >
-                详情
-              </Button>
-            ) : null}
-            {typeof onRun === "function" ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className={headerRunButtonClassName}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRun();
-                }}
-                aria-label={`执行 ${card.title}`}
-                title="快速执行"
-              >
-                执行
-              </Button>
-            ) : null}
-          </div>
-        </div>
+      <div className="min-w-0 text-[16px] font-semibold leading-5 text-[var(--color-text-primary)]">
+        {card.title}
       </div>
 
-      <div className="mt-3 grid items-stretch grid-cols-1 gap-2.5 md:grid-cols-[100px_minmax(0,1fr)]">
+      <div className="mt-2 flex flex-nowrap justify-start gap-1.5 overflow-x-auto">
+        <Button
+          type="button"
+          size="sm"
+          className={headerCopyButtonClassName}
+          style={{ border: "1px solid #000000", backgroundColor: "#ffffff", color: "#000000" }}
+          onClick={(event) => {
+            event.stopPropagation();
+            void copyToClipboard(
+              card.primaryActionText,
+              card.primaryActionSuccessMessage,
+            );
+          }}
+        >
+          {card.primaryActionLabel}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className={headerCopyButtonClassName}
+          style={{ border: "1px solid #000000", backgroundColor: "#ffffff", color: "#000000" }}
+          onClick={(event) => {
+            event.stopPropagation();
+            void copyToClipboard(
+              card.secondaryActionText,
+              card.secondaryActionSuccessMessage,
+            );
+          }}
+        >
+          {card.secondaryActionLabel}
+        </Button>
+        {isInterfaceModeCard ? (
+          typeof onRunAPI === "function" || typeof onRunScript === "function" ? (
+            <Button
+              type="button"
+              size="sm"
+              className={interfaceExecuteButtonClassName}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (typeof onRunAPI === "function") {
+                  onRunAPI();
+                  return;
+                }
+                onRunScript?.();
+              }}
+              aria-label={`执行 ${card.title}`}
+              title="执行"
+            >
+              <Play className="h-3.5 w-3.5" />
+              执行
+            </Button>
+          ) : null
+        ) : (
+          <>
+            {typeof onRunScript === "function" ? (
+              <Button
+                type="button"
+                size="sm"
+                className={scriptButtonClassName}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRunScript();
+                }}
+                aria-label={`执行脚本 ${card.title}`}
+                title="执行脚本"
+              >
+                <Play className="h-3.5 w-3.5" />
+                脚本
+              </Button>
+            ) : null}
+            {typeof onRunAPI === "function" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className={
+                  card.publicAPIEnabled
+                    ? scriptButtonClassName
+                    : apiSetupButtonClassName
+                }
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRunAPI();
+                }}
+                aria-label={`${card.publicAPIEnabled ? "执行接口" : "配置接口"} ${card.title}`}
+                title={card.publicAPIEnabled ? "执行接口" : "配置接口"}
+              >
+                {card.publicAPIEnabled ? (
+                  <Play className="h-3.5 w-3.5" />
+                ) : (
+                  <Link className="h-3.5 w-3.5" />
+                )}
+                {card.publicAPIEnabled ? "接口" : "配置"}
+              </Button>
+            ) : null}
+          </>
+        )}
+        {interactive ? (
+          <Button
+            type="button"
+            size="sm"
+            className={editButtonClassName}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen?.();
+            }}
+            aria-label={`编辑 ${card.title}`}
+            title="编辑"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            编辑
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[136px_minmax(0,1fr)]">
         <ScriptCardField label="类型">
           <span className="inline-flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${card.modeToneClass}`} />
@@ -381,8 +464,8 @@ function getAutomationModeLabel(type: AutomationScriptType): string {
 
 function getAutomationModeToneClass(type: AutomationScriptType): string {
   return type === "playwright-cdp"
-    ? "bg-[var(--color-info)]"
-    : "bg-[var(--color-success)]";
+    ? "bg-[var(--color-text-primary)]"
+    : "bg-[var(--color-text-secondary)]";
 }
 
 function buildAutomationSkillPrompt(
@@ -509,11 +592,13 @@ function buildAutomationCardPresentation(options: {
         payload: requestPayload,
       });
   const cardMode = buildAutomationCardMode(script);
+  const resolvedPublicAPI = resolveAutomationScriptPublicAPIConfig(script);
 
   return {
     key: script.id,
     title: script.name,
     scriptId: script.id,
+    scriptType: script.type,
     modeLabel: getAutomationModeLabel(script.type),
     description: buildAutomationShortDescription(script),
     codeDisplay: buildAutomationCodeDisplay(
@@ -521,18 +606,19 @@ function buildAutomationCardPresentation(options: {
       options.profiles,
       options.dualLaunchCodes,
     ),
-    primaryActionLabel:
-      cardMode === "skill" ? "复制Skill提示词" : "复制模拟cURL",
+    primaryActionLabel: cardMode === "skill" ? "Skill" : "cURL",
     primaryActionText:
       cardMode === "skill"
         ? buildAutomationSkillPrompt(script, requestPayload)
         : requestCurlDemo,
     primaryActionSuccessMessage:
       cardMode === "skill" ? "Skill 提示词已复制" : "模拟 cURL 已复制",
-    secondaryActionLabel: "复制请求JSON",
+    secondaryActionLabel: "JSON",
     secondaryActionText: requestPayloadText,
     secondaryActionSuccessMessage: "请求 JSON 已复制",
     modeToneClass: getAutomationModeToneClass(script.type),
+    publicAPIEnabled: resolvedPublicAPI.enabled,
+    railClassName: getAutomationCardRailClass(script.id),
   };
 }
 
@@ -544,16 +630,19 @@ function buildDualInstanceFallbackPresentation(options: {
   return {
     key: `${DUAL_INSTANCE_SCRIPT_ID}-fallback`,
     title: "双实例启动与 Runtime 切换",
+    scriptType: "launch-api",
     modeLabel: "接口模式",
     description: "启动双实例并切换 Runtime",
     codeDisplay: `${options.dualLaunchCodes.primaryCode} / ${options.dualLaunchCodes.secondaryCode}`,
-    primaryActionLabel: "复制模拟cURL",
+    primaryActionLabel: "cURL",
     primaryActionText: options.dualInstanceRunCurlDemo,
     primaryActionSuccessMessage: "模拟 cURL 已复制",
-    secondaryActionLabel: "复制请求JSON",
+    secondaryActionLabel: "JSON",
     secondaryActionText: options.dualInstanceRunPayloadText,
     secondaryActionSuccessMessage: "请求 JSON 已复制",
     modeToneClass: getAutomationModeToneClass("launch-api"),
+    publicAPIEnabled: false,
+    railClassName: getAutomationCardRailClass(DUAL_INSTANCE_SCRIPT_ID),
   };
 }
 
@@ -604,12 +693,30 @@ function buildCurlAuthHeaderLine(
   return `  -H "${apiAuthHeader}: <YOUR_API_KEY>" \\\n`;
 }
 
+function buildPersistablePublicAPIConfig(
+  script: AutomationScriptRecord,
+): AutomationScriptPublicAPIConfig {
+  return prepareAutomationScriptPublicAPIConfigForSave({
+    ...script,
+    publicAPI: resolveAutomationScriptPublicAPIConfig(script),
+  });
+}
+
+function mergeImportedScripts(
+  current: AutomationScriptRecord[],
+  imported: AutomationScriptRecord[],
+): AutomationScriptRecord[] {
+  const deduped = new Map(imported.map((item) => [item.id, item]));
+  return [...imported, ...current.filter((item) => !deduped.has(item.id))];
+}
+
 export function AutomationPage() {
   const navigate = useNavigate();
   const { launchBaseUrl, apiAuth } = useLaunchContext();
   const [scripts, setScripts] = useState<AutomationScriptRecord[]>([]);
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [toolboxOpen, setToolboxOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -617,6 +724,11 @@ export function AutomationPage() {
   const [runModalOpen, setRunModalOpen] = useState(false);
   const [activeRunScript, setActiveRunScript] =
     useState<AutomationScriptRecord | null>(null);
+  const [publicApiModalOpen, setPublicApiModalOpen] = useState(false);
+  const [publicApiTestFocusTrigger, setPublicApiTestFocusTrigger] = useState(0);
+  const [activePublicApiScript, setActivePublicApiScript] =
+    useState<AutomationScriptRecord | null>(null);
+  const [publicApiSaving, setPublicApiSaving] = useState(false);
   const [createType, setCreateType] =
     useState<AutomationScriptType>("playwright-cdp");
   const [createName, setCreateName] = useState("");
@@ -682,6 +794,114 @@ export function AutomationPage() {
     setRunModalOpen(true);
   };
 
+  const handleOpenPublicApiModal = (
+    script: AutomationScriptRecord,
+    options?: { focusTest?: boolean },
+  ) => {
+    setActivePublicApiScript({ ...script });
+    if (options?.focusTest) {
+      setPublicApiTestFocusTrigger((current) => current + 1);
+    } else {
+      setPublicApiTestFocusTrigger(0);
+    }
+    setPublicApiModalOpen(true);
+  };
+
+  const updateActivePublicApiConfig = (
+    publicAPI: AutomationScriptPublicAPIConfig,
+  ) => {
+    setActivePublicApiScript((current) =>
+      current
+        ? {
+            ...current,
+            publicAPI,
+          }
+        : current,
+    );
+  };
+
+  const persistPublicApiScript = async (
+    script: AutomationScriptRecord,
+    options?: { silentSuccess?: boolean },
+  ): Promise<AutomationScriptRecord | null> => {
+    setPublicApiSaving(true);
+    try {
+      const saved = await saveAutomationScript({
+        ...script,
+        name: script.name.trim(),
+        description: script.description.trim(),
+        publicAPI: buildPersistablePublicAPIConfig(script),
+        updatedAt: new Date().toISOString(),
+      });
+      setScripts((current) =>
+        current.map((item) => (item.id === saved.id ? saved : item)),
+      );
+      setActivePublicApiScript(saved);
+      if (!options?.silentSuccess) {
+        toast.success("接口配置已保存");
+      }
+      return saved;
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "接口配置保存失败";
+      toast.error(message);
+      return null;
+    } finally {
+      setPublicApiSaving(false);
+    }
+  };
+
+  const handlePreparePublicApiInvoke = async (
+    publicAPI: AutomationScriptPublicAPIConfig,
+  ): Promise<boolean> => {
+    if (!activePublicApiScript) {
+      return false;
+    }
+
+    const nextScript = {
+      ...activePublicApiScript,
+      publicAPI,
+    };
+    setActivePublicApiScript(nextScript);
+    const saved = await persistPublicApiScript(nextScript, {
+      silentSuccess: true,
+    });
+    return Boolean(saved);
+  };
+
+  const handleRefresh = async () => {
+    if (refreshing) {
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      const [scriptsResult, profilesResult] = await Promise.allSettled([
+        fetchAutomationScripts(),
+        fetchBrowserProfiles(),
+      ]);
+
+      if (scriptsResult.status === "fulfilled") {
+        setScripts(scriptsResult.value);
+      } else {
+        toast.error("脚本列表刷新失败");
+      }
+
+      if (profilesResult.status === "fulfilled") {
+        setProfiles(profilesResult.value || []);
+      }
+
+      if (
+        scriptsResult.status === "fulfilled" &&
+        profilesResult.status === "fulfilled"
+      ) {
+        toast.success("已刷新");
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const resetCreateModal = () => {
     setCreateType("playwright-cdp");
     setCreateName("");
@@ -740,41 +960,54 @@ export function AutomationPage() {
   const handleImport = async () => {
     setBusyAction("import");
     try {
-      let saved: AutomationScriptRecord;
+      let imported: AutomationScriptRecord[] = [];
+      let failedCount = 0;
 
       switch (importMode) {
         case "text": {
-          saved = await importAutomationScriptFromText(importText);
+          imported = [await importAutomationScriptFromText(importText)];
           break;
         }
         case "local-file":
-          saved = await importAutomationScriptFromLocalFile();
+          imported = [await importAutomationScriptFromLocalFile()];
           break;
         case "local-dir":
-          saved = await importAutomationScriptFromLocalDirectory();
+          imported = [await importAutomationScriptFromLocalDirectory()];
           break;
+        case "local-library": {
+          const result = await importAutomationScriptFromLocalLibrary();
+          imported = result.imported;
+          failedCount = result.failed.length;
+          break;
+        }
         case "remote-url":
-          saved = await importAutomationScriptFromRemote(remoteURL);
+          imported = [await importAutomationScriptFromRemote(remoteURL)];
           break;
         case "git":
-          saved = await importAutomationScriptFromGit(
-            gitURL,
-            gitRef,
-            gitScriptPath,
-          );
+          imported = [
+            await importAutomationScriptFromGit(gitURL, gitRef, gitScriptPath),
+          ];
           break;
         default:
           throw new Error("不支持的导入方式");
       }
 
-      setScripts((current) => [
-        saved,
-        ...current.filter((item) => item.id !== saved.id),
-      ]);
+      if (imported.length === 0) {
+        throw new Error("未导入任何脚本");
+      }
+
+      setScripts((current) => mergeImportedScripts(current, imported));
       setImportOpen(false);
       resetImportModal();
-      toast.success("脚本已导入");
-      openScript(saved.id);
+      if (imported.length === 1 && failedCount === 0) {
+        toast.success("脚本已导入");
+        openScript(imported[0].id);
+      } else {
+        toast.success(`已导入 ${imported.length} 个脚本`);
+        if (failedCount > 0) {
+          toast.warning(`${failedCount} 个脚本包导入失败`);
+        }
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "脚本导入失败";
       toast.error(message);
@@ -853,6 +1086,15 @@ export function AutomationPage() {
           脚本管理
         </h1>
         <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleRefresh()}
+            loading={refreshing}
+          >
+            <RefreshCw className="h-4 w-4" />
+            刷新
+          </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <PlusSquare className="h-4 w-4" />
             新建脚本
@@ -913,20 +1155,39 @@ export function AutomationPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
+          <div
+            className="grid items-stretch gap-3"
+            style={{
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(min(100%, max(430px, calc((100% - 36px) / 4))), 1fr))",
+            }}
+          >
             {cards.map((card) => {
               const scriptId = card.scriptId;
               const onOpen = scriptId ? () => openScript(scriptId) : undefined;
               const script = scriptId ? scriptMap.get(scriptId) : undefined;
-              const onRun = script ? () => handleOpenRunModal(script) : undefined;
+              const publicAPIEnabled = script
+                ? resolveAutomationScriptPublicAPIConfig(script).enabled
+                : false;
+              const onRunScript = script && script.type !== "launch-api"
+                ? () => handleOpenRunModal(script)
+                : undefined;
+              const onRunAPI = script
+                ? () =>
+                    handleOpenPublicApiModal(script, {
+                      focusTest: publicAPIEnabled,
+                    })
+                : undefined;
 
               return (
-                <AutomationScriptSummaryCard
-                  key={card.key}
-                  card={card}
-                  onOpen={onOpen}
-                  onRun={onRun}
-                />
+                <div key={card.key} className="min-w-0">
+                  <AutomationScriptSummaryCard
+                    card={card}
+                    onOpen={onOpen}
+                    onRunScript={onRunScript}
+                    onRunAPI={onRunAPI}
+                  />
+                </div>
               );
             })}
           </div>
@@ -1005,6 +1266,7 @@ export function AutomationPage() {
               { value: "text", label: "文本" },
               { value: "local-file", label: "本地文件" },
               { value: "local-dir", label: "本地目录" },
+              { value: "local-library", label: "脚本库" },
               { value: "remote-url", label: "远程 URL" },
               { value: "git", label: "Git" },
             ].map((item) => (
@@ -1050,6 +1312,12 @@ export function AutomationPage() {
             </div>
           ) : null}
 
+          {importMode === "local-library" ? (
+            <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-4 py-4 text-sm text-[var(--color-text-secondary)]">
+              导入时会弹出目录选择框。系统会扫描所选目录下的脚本包并批量导入，来源按本地目录记录，后续刷新不走 Git。
+            </div>
+          ) : null}
+
           {importMode === "remote-url" ? (
             <div className="space-y-4">
               <div className="text-sm text-[var(--color-text-secondary)]">
@@ -1068,7 +1336,7 @@ export function AutomationPage() {
           {importMode === "git" ? (
             <div className="space-y-4">
               <div className="text-sm text-[var(--color-text-secondary)]">
-                会先拉取仓库，再把脚本快照导入当前项目。支持仓库根目录或指定子目录；若入口是 `.ts/.cts/.mts`，需要设置页已开启 TypeScript 导入构建。
+                会先拉取仓库，再把脚本快照导入当前项目。可以只填一个脚本子目录，系统只扫描那个目录；不填时才会按仓库根目录解析。若入口是 `.ts/.cts/.mts`，需要设置页已开启 TypeScript 导入构建。
               </div>
               <FormItem label="仓库地址">
                 <Input
@@ -1089,7 +1357,7 @@ export function AutomationPage() {
                   <Input
                     value={gitScriptPath}
                     onChange={(event) => setGitScriptPath(event.target.value)}
-                    placeholder="scripts/demo"
+                    placeholder="scripts/demo（留空=仓库根目录）"
                   />
                 </FormItem>
               </div>
@@ -1111,6 +1379,27 @@ export function AutomationPage() {
           setActiveRunScript(null);
         }}
       />
+      {activePublicApiScript ? (
+        <AutomationScriptPublicApiModal
+          open={publicApiModalOpen}
+          script={activePublicApiScript}
+          busy={publicApiSaving}
+          launchBaseUrl={launchBaseUrl}
+          apiAuthEnabled={apiAuth.enabled}
+          apiAuthHeader={apiAuth.header}
+          profiles={profiles}
+          focusTestTrigger={publicApiTestFocusTrigger}
+          onClose={() => {
+            if (publicApiSaving) {
+              return;
+            }
+            setPublicApiModalOpen(false);
+            setActivePublicApiScript(null);
+          }}
+          onChange={updateActivePublicApiConfig}
+          onBeforeInvoke={handlePreparePublicApiInvoke}
+        />
+      ) : null}
       <AutomationScriptHistoryModal
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}

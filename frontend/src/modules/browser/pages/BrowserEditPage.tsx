@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { FolderOpen, Layers } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
 import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup } from '../types'
-import { createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile } from '../api'
+import { createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
@@ -11,6 +11,7 @@ import { ProxyPickerModal } from '../components/ProxyPickerModal'
 
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
 const directProxyID = '__direct__'
+type ProxySourceMode = 'pool' | 'local'
 
 function normalizeLaunchArgs(args: string[]): string[] {
   return (args || []).map(item => item.trim()).filter(Boolean)
@@ -25,12 +26,12 @@ function resolvePoolProxySelection(
   proxyId: string,
   proxyConfig: string,
   proxies: BrowserProxy[],
-): { proxyId: string; proxyConfig: string } {
+): { mode: ProxySourceMode; proxyId: string; proxyConfig: string } {
   const normalizedProxyId = proxyId.trim()
   if (normalizedProxyId) {
     const matchedByID = proxies.find((proxy) => proxy.proxyId.trim() === normalizedProxyId)
     if (matchedByID?.proxyId) {
-      return { proxyId: matchedByID.proxyId, proxyConfig: '' }
+      return { mode: 'pool', proxyId: matchedByID.proxyId, proxyConfig: '' }
     }
   }
 
@@ -39,13 +40,13 @@ function resolvePoolProxySelection(
   if (normalizedConfig) {
     const matchedByConfig = proxies.find((proxy) => (proxy.proxyConfig || '').trim().toLowerCase() === normalizedConfig)
     if (matchedByConfig?.proxyId) {
-      return { proxyId: matchedByConfig.proxyId, proxyConfig: '' }
+      return { mode: 'pool', proxyId: matchedByConfig.proxyId, proxyConfig: '' }
     }
-    return { proxyId: '', proxyConfig: rawProxyConfig }
+    return { mode: 'local', proxyId: '', proxyConfig: rawProxyConfig }
   }
 
   const directProxy = proxies.find((proxy) => proxy.proxyId === directProxyID)
-  return { proxyId: directProxy?.proxyId || '', proxyConfig: '' }
+  return { mode: 'pool', proxyId: directProxy?.proxyId || '', proxyConfig: '' }
 }
 
 export function BrowserEditPage() {
@@ -71,6 +72,7 @@ export function BrowserEditPage() {
   const [allTags, setAllTags] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [proxyPickerOpen, setProxyPickerOpen] = useState(false)
+  const [proxyMode, setProxyMode] = useState<ProxySourceMode>('pool')
   const [isDirty, setIsDirty] = useState(false)
   const [leaveConfirm, setLeaveConfirm] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -92,6 +94,7 @@ export function BrowserEditPage() {
 
       if (isCreate) {
         const resolved = resolvePoolProxySelection('', '', proxyList)
+        setProxyMode('pool')
         setFormData((prev) => ({ ...prev, proxyId: resolved.proxyId || directProxyID, proxyConfig: '' }))
         setLaunchArgsText(resolvedDefaultLaunchArgs.join('\n'))
         return
@@ -104,6 +107,7 @@ export function BrowserEditPage() {
         ? ''
         : current.coreId
       const resolvedProxy = resolvePoolProxySelection(current.proxyId || '', current.proxyConfig || '', proxyList)
+      setProxyMode(resolvedProxy.mode)
       setFormData({
         profileName: current.profileName,
         userDataDir: current.userDataDir,
@@ -125,30 +129,55 @@ export function BrowserEditPage() {
     setIsDirty(true)
     setFormData(prev => {
       if (field === 'proxyId') {
-        return { ...prev, proxyId: typeof value === 'string' ? value : '', proxyConfig: '' }
+        return { ...prev, proxyId: typeof value === 'string' ? value : '' }
       }
       return { ...prev, [field]: value }
     })
   }
 
+  const handleProxyModeChange = (mode: ProxySourceMode) => {
+    setIsDirty(true)
+    setProxyMode(mode)
+    if (mode === 'pool') {
+      setFormData((prev) => {
+        if (prev.proxyId.trim()) {
+          return prev
+        }
+        const directProxy = proxies.find((proxy) => proxy.proxyId === directProxyID)
+        return {
+          ...prev,
+          proxyId: directProxy?.proxyId || '',
+        }
+      })
+    }
+  }
+
   const handleSave = async () => {
-    setSaving(true)
-    const resolvedProxyId = (formData.proxyId || '').trim()
-    const resolvedProxyConfig = (formData.proxyConfig || '').trim()
+    const resolvedProxyId = proxyMode === 'pool' ? (formData.proxyId || '').trim() : ''
+    const resolvedProxyConfig = proxyMode === 'local' ? (formData.proxyConfig || '').trim() : ''
+    if (proxyMode === 'local' && !resolvedProxyConfig) {
+      setSaveError('请输入本地代理地址')
+      return
+    }
+
     const payload: BrowserProfileInput = {
       ...formData,
       proxyId: resolvedProxyId,
-      proxyConfig: '',
+      proxyConfig: resolvedProxyConfig,
       launchArgs: normalizeLaunchArgs(launchArgsText.split('\n')),
     }
-    if (!resolvedProxyId) {
-      if (resolvedProxyConfig) {
-        payload.proxyConfig = resolvedProxyConfig
-      } else {
-        payload.proxyId = directProxyID
-      }
+    if (proxyMode === 'pool' && !resolvedProxyId) {
+      payload.proxyId = directProxyID
+      payload.proxyConfig = ''
     }
+
+    setSaving(true)
     try {
+      const validation = await validateProxyConfig(payload.proxyConfig, payload.proxyId)
+      if (!validation.supported) {
+        setSaveError(validation.errorMsg || '代理配置无效')
+        return
+      }
       if (isCreate) {
         await createBrowserProfile(payload)
         toast.success('配置已创建')
@@ -170,6 +199,7 @@ export function BrowserEditPage() {
   }
 
   const defaultCore = cores.find(c => c.isDefault)
+  const selectedPoolProxy = proxies.find((proxy) => proxy.proxyId === formData.proxyId)
 
   const handleOpenUserDataDir = async () => {
     if (!formData.userDataDir.trim()) {
@@ -267,32 +297,50 @@ export function BrowserEditPage() {
         </div>
       </Card>
 
-      <Card title="代理配置" subtitle="仅支持从代理池选择（包含直连节点）">
+      <Card title="代理配置" subtitle="支持代理池节点或本地代理地址">
         <div className="grid grid-cols-1 gap-4">
-          <FormItem label="代理池选择">
-            <div className="flex gap-2">
-              <Select
-                value={formData.proxyId}
-                onChange={e => handleChange('proxyId', e.target.value)}
-                options={
-                  proxies.length > 0 ? [
-                    ...(formData.proxyId === '' && formData.proxyConfig
-                      ? [{ value: '', label: '接口自定义代理（保持原值）' }]
-                      : []),
-                    ...proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId })),
-                  ] : [{ value: '', label: '暂无代理，请先到代理池创建' }]
-                }
-                className="flex-1"
-              />
-              <Button variant="secondary" size="sm" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
-                <Layers className="w-4 h-4" />
-              </Button>
-            </div>
+          <FormItem label="代理来源">
+            <Select
+              value={proxyMode}
+              onChange={e => handleProxyModeChange(e.target.value as ProxySourceMode)}
+              options={[
+                { value: 'pool', label: '代理池' },
+                { value: 'local', label: '本地代理' },
+              ]}
+            />
           </FormItem>
+          {proxyMode === 'pool' ? (
+            <FormItem label="代理地址选择">
+              <div className="flex gap-2">
+                <Select
+                  value={formData.proxyId}
+                  onChange={e => handleChange('proxyId', e.target.value)}
+                  options={
+                    proxies.length > 0
+                      ? proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId }))
+                      : [{ value: '', label: '暂无代理，请先到代理池创建' }]
+                  }
+                  className="flex-1"
+                />
+                <Button variant="secondary" size="sm" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
+                  <Layers className="w-4 h-4" />
+                </Button>
+              </div>
+            </FormItem>
+          ) : (
+            <FormItem label="本地代理地址" hint="支持 http://、https://、socks5://">
+              <Input
+                value={formData.proxyConfig}
+                onChange={e => handleChange('proxyConfig', e.target.value)}
+                placeholder="http://127.0.0.1:7890"
+              />
+            </FormItem>
+          )}
         </div>
         <p className="text-xs text-[var(--color-text-muted)] mt-2">
-          已移除手动代理输入，实例默认按代理池节点生效。
-          {formData.proxyId === '' && formData.proxyConfig ? ' 当前实例为接口自定义代理，未改动代理选择时会保持原值。' : ''}
+          {proxyMode === 'pool'
+            ? `当前使用代理池节点${selectedPoolProxy?.proxyName ? `：${selectedPoolProxy.proxyName}` : '。'}`
+            : '本地代理不会进入代理池，只对当前实例保存生效。'}
         </p>
       </Card>
 

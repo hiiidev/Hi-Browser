@@ -51,6 +51,12 @@ type ProfileInput struct {
 	GroupId         string   `json:"groupId"` // 所属分组ID
 }
 
+// ProfileCopyOptions 复制实例时的附加选项。
+type ProfileCopyOptions struct {
+	Mode              string   `json:"mode"`
+	AutomationTargets []string `json:"automationTargets"`
+}
+
 // Tab 浏览器标签页
 type Tab struct {
 	TabId  string `json:"tabId"`
@@ -65,6 +71,7 @@ type Settings struct {
 	DefaultFingerprintArgs []string `json:"defaultFingerprintArgs"`
 	DefaultLaunchArgs      []string `json:"defaultLaunchArgs"`
 	DefaultStartURLs       []string `json:"defaultStartUrls"`
+	LightStartEnabled      bool     `json:"lightStartEnabled"`
 	RestoreLastSession     bool     `json:"restoreLastSession"`
 	StartReadyTimeoutMs    int      `json:"startReadyTimeoutMs"`
 	StartStableWindowMs    int      `json:"startStableWindowMs"`

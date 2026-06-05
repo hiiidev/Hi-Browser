@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '../../../shared/components'
 import { fetchDashboardStats, redeemCDKey, redeemGithubStar, reloadConfig } from '../../dashboard/api'
-import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
+import type { BrowserCore, BrowserCoreInput, BrowserProfile, BrowserProfileCopyOptions, BrowserProxy, BrowserSettings, BrowserGroupWithCount } from '../types'
 import { BrowserCoreEditorModal, BrowserListHeader, BrowserListSettingsModal, type BrowserViewMode } from '../components/BrowserListLayout'
 import { BatchToolbar } from '../components/BrowserListWidgets'
 import { BrowserProfilesPanel } from '../components/BrowserProfilesPanel'
 import { EMPTY_FILTERS } from '../components/InstanceFilterBar'
 import type { InstanceFilters } from '../components/InstanceFilterBar'
+import { createBrowserProfileCopyOptions, isBrowserProfileCopyOptionsValid } from '../copyOptions'
+import { buildBrowserProfileCopyName } from '../copyName'
 import { EventsOn, BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import { PROJECT_GITHUB_URL } from '../../../config/links'
 import { resolveActionErrorMessage, resolveActionFeedback } from '../utils/actionErrors'
@@ -110,15 +112,18 @@ export function BrowserListPage() {
   // 复制弹窗
   const [copyModal, setCopyModal] = useState<{ open: boolean; profile: BrowserProfile | null }>({ open: false, profile: null })
   const [copyName, setCopyName] = useState('')
+  const [copyOptions, setCopyOptions] = useState<BrowserProfileCopyOptions>(() => createBrowserProfileCopyOptions())
   const [copying, setCopying] = useState(false)
 
   const openCopyModal = (profile: BrowserProfile) => {
-    setCopyName(profile.profileName + ' (副本)')
+    setCopyName(buildBrowserProfileCopyName(profile.profileName))
+    setCopyOptions(createBrowserProfileCopyOptions())
     setCopyModal({ open: true, profile })
   }
   const closeCopyModal = () => {
     setCopyModal({ open: false, profile: null })
     setCopyName('')
+    setCopyOptions(createBrowserProfileCopyOptions())
   }
 
   // 基础配置弹窗
@@ -128,6 +133,7 @@ export function BrowserListPage() {
     defaultFingerprintArgs: [],
     defaultLaunchArgs: [],
     defaultStartUrls: [],
+    lightStartEnabled: true,
     restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
@@ -399,7 +405,7 @@ export function BrowserListPage() {
 
       const startedProfile = await startBrowserInstance(profileId)
       mergeProfileState(startedProfile)
-      if (startedProfile?.running && !startedProfile.debugReady && startedProfile.runtimeWarning) {
+      if (startedProfile?.runtimeWarning) {
         toast.warning(startedProfile.runtimeWarning)
       } else {
         toast.success(`实例已启动${startedProfile?.profileName ? `：${startedProfile.profileName}` : ''}`)
@@ -425,7 +431,7 @@ export function BrowserListPage() {
       mergeProfileState(startedProfile)
       setProxyErrorModal(false)
       setPendingStartId(null)
-      if (startedProfile?.running && !startedProfile.debugReady && startedProfile.runtimeWarning) {
+      if (startedProfile?.runtimeWarning) {
         toast.warning(startedProfile.runtimeWarning)
       } else {
         toast.success(`实例已直连启动${startedProfile?.profileName ? `：${startedProfile.profileName}` : ''}`)
@@ -594,17 +600,19 @@ export function BrowserListPage() {
     if (!copyModal.profile) return
     setCopying(true)
     try {
-      await copyBrowserProfile(profileId, copyName)
+      await copyBrowserProfile(profileId, copyName.trim(), copyOptions)
       toast.success('实例已复制')
       closeCopyModal()
       loadProfiles()
     } catch (error: any) {
-      closeCopyModal()
       setOpError(typeof error === 'string' ? error : error?.message || '复制失败')
     } finally {
       setCopying(false)
     }
   }
+
+  const copyConfirmDisabled =
+    !copyName.trim() || !isBrowserProfileCopyOptionsValid(copyOptions)
 
   const handleOpenSettings = async () => {
     await Promise.all([loadSettings(), loadCores()])
@@ -845,9 +853,12 @@ export function BrowserListPage() {
         onOpenGithubStarGift={handleOpenGithubStarGift}
         copyModal={copyModal}
         copyName={copyName}
+        copyOptions={copyOptions}
         onCopyNameChange={setCopyName}
+        onCopyOptionsChange={setCopyOptions}
         onCloseCopy={closeCopyModal}
         onConfirmCopy={() => copyModal.profile && handleCopy(copyModal.profile.profileId)}
+        copyConfirmDisabled={copyConfirmDisabled}
         copying={copying}
         opError={opError}
         onCloseOpError={() => setOpError('')}

@@ -29,6 +29,7 @@ type ScriptRunRecord struct {
 type ScriptRunRequest struct {
 	ScriptID          string `json:"scriptId"`
 	SelectorText      string `json:"selectorText"`
+	TargetInput       any    `json:"targetInput,omitempty"`
 	ParamsText        string `json:"paramsText"`
 	UseScriptSelector bool   `json:"useScriptSelector"`
 	UseScriptParams   bool   `json:"useScriptParams"`

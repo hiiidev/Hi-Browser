@@ -26,6 +26,7 @@ type browserStartPlan struct {
 	chromeBinaryPath      string
 	userDataDir           string
 	args                  []string
+	deferredStartTargets  []string
 	effectiveProxy        string
 	acquiredXrayBridgeKey string
 	releaseXrayBridge     bool
@@ -35,6 +36,8 @@ type browserStartPlan struct {
 	maxStartAttempts      int
 	totalReadyTimeout     time.Duration
 }
+
+var clearBrowserSessionRestoreData = browser.ClearSessionRestoreData
 
 func newBrowserStartInput(profileID string, extraLaunchArgs []string, startURLs []string, skipDefaultStartURLs bool, preferVisibleWindow bool, forceDirectProxy bool, proxyID string, proxyConfig string) browserStartInput {
 	normalizedExtraLaunchArgs := normalizeNonEmptyStrings(extraLaunchArgs)
@@ -76,6 +79,7 @@ func (a *App) resolveBrowserStartProfile(input browserStartInput) (*BrowserProfi
 		log.Error("实例不存在", logger.F("profile_id", input.ProfileID), logger.F("reason", err.Error()))
 		return nil, false, err
 	}
+	a.ensureProfileLaunchCode(profile)
 
 	if !profile.Running {
 		return profile, false, nil
@@ -113,7 +117,8 @@ func (a *App) resolveBrowserStartProfile(input browserStartInput) (*BrowserProfi
 }
 
 func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserProfile) (*browserStartPlan, error) {
-	sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, chromeBinaryPath, userDataDir, err := a.prepareBrowserLaunchContext(input, profile)
+	bookmarks := a.BookmarkList()
+	sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, chromeBinaryPath, userDataDir, err := a.prepareBrowserLaunchContext(input, profile, bookmarks)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +131,15 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 	startReadyTimeout, startStableWindow := a.browserStartTimingSettings()
 	maxStartAttempts := browserStartAttemptCount()
 	totalReadyTimeout := time.Duration(maxStartAttempts) * startReadyTimeout
+	restoreLastSession := browserRestoreLastSession(a.config)
+	defaultStartURLs := mergeStartURLs(browserDefaultStartURLs(a.config), bookmarkStartURLs(bookmarks))
+	launchTargets, deferredStartTargets := buildBrowserLaunchTargets(
+		input.StartURLs,
+		defaultStartURLs,
+		input.SkipDefaultStartURLs,
+		restoreLastSession,
+		browserLightStartEnabled(a.config),
+	)
 
 	assignedDebugPort, err := nextAvailablePort()
 	if err != nil {
@@ -143,7 +157,8 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 		profile:               profile,
 		chromeBinaryPath:      chromeBinaryPath,
 		userDataDir:           userDataDir,
-		args:                  buildBrowserLaunchArgs(profile, userDataDir, assignedDebugPort, effectiveProxy, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, input.StartURLs, a.browserDefaultStartURLs(), input.SkipDefaultStartURLs, browserRestoreLastSession(a.config)),
+		args:                  buildBrowserLaunchArgs(profile, userDataDir, assignedDebugPort, effectiveProxy, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
+		deferredStartTargets:  deferredStartTargets,
 		effectiveProxy:        effectiveProxy,
 		acquiredXrayBridgeKey: acquiredXrayBridgeKey,
 		releaseXrayBridge:     releaseXrayBridge,
@@ -155,7 +170,7 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 	}, nil
 }
 
-func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *BrowserProfile) ([]string, []string, string, string, error) {
+func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *BrowserProfile, bookmarks []BrowserBookmark) ([]string, []string, string, string, error) {
 	log := logger.New("Browser")
 
 	sanitizedProfileLaunchArgs, managedProfileArgs := sanitizeManagedLaunchArgs(profile.LaunchArgs)
@@ -193,12 +208,47 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 		return nil, nil, "", "", startErr
 	}
 
-	if err := browser.EnsureDefaultBookmarks(userDataDir, a.BookmarkList()); err != nil {
+	if err := browser.EnsureDefaultBookmarks(userDataDir, bookmarks); err != nil {
 		log.Error("默认书签写入失败", logger.F("error", err.Error()))
 	}
 
+	if detection, ok := detectBrowserRuntimeByActivePort(userDataDir); ok && detection.DebugReady {
+		a.markProfileRunningLocked(input.ProfileID, profile, nil, detection.PID, detection.DebugPort, true, "")
+		log.Warn("检测到同一用户数据目录已有浏览器运行，已接管为当前实例状态",
+			logger.F("profile_id", input.ProfileID),
+			logger.F("user_data_dir", userDataDir),
+			logger.F("pid", detection.PID),
+			logger.F("debug_port", detection.DebugPort),
+		)
+		if input.PreferVisibleWindow {
+			if err := a.openBrowserWindowForRunningProfile(profile, input.ExtraLaunchArgs, input.StartURLs); err != nil {
+				startErr := fmt.Errorf("实例已在运行，但窗口唤起失败：%w", err)
+				profile.LastError = startErr.Error()
+				return nil, nil, "", "", startErr
+			}
+		}
+		return nil, nil, "", "", errBrowserStartHandledByRecoveredRuntime
+	}
+
 	if !browserRestoreLastSession(a.config) {
-		if err := browser.ClearSessionRestoreData(userDataDir); err != nil {
+		if err := clearBrowserSessionRestoreData(userDataDir); err != nil {
+			if terminated, terminateErr := terminateBrowserProcessesByUserDataDir(userDataDir, 5*time.Second); terminateErr == nil && terminated {
+				log.Warn("会话缓存被旧浏览器进程占用，已结束占用进程并重试清理",
+					logger.F("profile_id", input.ProfileID),
+					logger.F("user_data_dir", userDataDir),
+				)
+				if retryErr := clearBrowserSessionRestoreData(userDataDir); retryErr == nil {
+					return sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, chromeBinaryPath, userDataDir, nil
+				} else {
+					err = retryErr
+				}
+			} else if terminateErr != nil {
+				log.Warn("会话缓存清理失败后尝试结束占用进程失败",
+					logger.F("profile_id", input.ProfileID),
+					logger.F("user_data_dir", userDataDir),
+					logger.F("error", terminateErr.Error()),
+				)
+			}
 			sessionDir := filepath.Join(userDataDir, "Default", "Sessions")
 			startErr := fmt.Errorf("实例启动失败：无法清理上次会话缓存 %s。原因：%w。请关闭占用该目录的浏览器进程后重试。", sessionDir, err)
 			log.Error("会话恢复缓存清理失败",
@@ -215,7 +265,7 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 	return sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, chromeBinaryPath, userDataDir, nil
 }
 
-func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPort int, effectiveProxy string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, startURLs []string, defaultStartURLs []string, skipDefaultStartURLs bool, restoreLastSession bool) []string {
+func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPort int, effectiveProxy string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string) []string {
 	args := []string{
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 		fmt.Sprintf("--remote-debugging-port=%d", debugPort),
@@ -241,7 +291,7 @@ func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPo
 	}
 
 	if effectiveProxy == "direct://" {
-		args = append(args, "--proxy-server=direct://")
+		args = append(args, "--no-proxy-server")
 	} else if effectiveProxy != "" {
 		args = append(args, fmt.Sprintf("--proxy-server=%s", effectiveProxy))
 	}
@@ -249,5 +299,5 @@ func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPo
 	args = append(args, profile.FingerprintArgs...)
 	args = append(args, sanitizedProfileLaunchArgs...)
 	args = append(args, sanitizedExtraLaunchArgs...)
-	return appendLaunchTargets(args, startURLs, defaultStartURLs, skipDefaultStartURLs, restoreLastSession)
+	return browser.BuildLaunchArgs(args, launchTargets)
 }

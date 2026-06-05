@@ -1,0 +1,58 @@
+{
+  "format": "ant-automation-script",
+  "packageFormat": "ant-automation-script",
+  "manifestVersion": 1,
+  "id": "web-image-generate-download",
+  "name": "网页图片生成并下载",
+  "description": "打开指定网页，创建新会话，发送图片生成消息，等待图片生成后下载图片。当前是等待补充页面信息的脚手架。",
+  "type": "playwright-cdp",
+  "status": "draft",
+  "entryFile": "index.cjs",
+  "tags": [
+    "Playwright",
+    "图片生成",
+    "下载",
+    "脚手架"
+  ],
+  "params": {
+    "pageUrl": "https://chatgpt.com/",
+    "prompt": "A cinematic chrome ant browser mascot, premium product lighting",
+    "outputFileName": "generated-image.png",
+    "selectors": {
+      "newSessionButton": "",
+      "promptInput": "#prompt-textarea[contenteditable=\"true\"], textarea[name=\"prompt-textarea\"]",
+      "sendButton": "button[data-testid=\"send-button\"], button[aria-label*=\"发送\"], button.composer-submit-button-color",
+      "generatedImage": "img[src*=\"/backend-api/estuary/content\"], img[alt*=\"已生成图片\"], img[src*=\"oaiusercontent\"], img[src*=\"oaidalleapiprodscus\"], img[alt*=\"生成\"], img[alt*=\"image\" i]",
+      "downloadButton": ""
+    },
+    "timeoutMs": 300000,
+    "waitAfterLoadMs": 1200,
+    "settleMs": 2500,
+    "captureScreenshot": false
+  },
+  "notes": "脚本默认打开 ChatGPT，输入图片生成提示词并发送；等待 img[src*=\"/backend-api/estuary/content\"] 或 alt 包含“已生成图片”的结果出现后，使用页面登录态读取图片地址并保存到本地。",
+  "publicAPI": {
+    "enabled": true,
+    "method": "POST",
+    "path": "image/chatgpt-generate-download",
+    "requestMode": "standard",
+    "responseMode": "envelope",
+    "timeoutMs": 300000,
+    "requestBodyText": "{\n  \"params\": {\n    \"prompt\": \"{{prompt}}\"\n  }\n}",
+    "responseBodyText": "{\n  \"ok\": true,\n  \"outputPath\": \"${artifactsDir}/generated-image.png\",\n  \"downloadAddress\": \"${artifactsDir}/generated-image.png\"\n}",
+    "variables": [
+      {
+        "name": "prompt",
+        "defaultValue": "A cinematic chrome ant browser mascot, premium product lighting",
+        "description": "发送到 ChatGPT 的图片生成提示词。",
+        "required": true
+      }
+    ]
+  },
+  "source": {
+    "type": "builtin",
+    "uri": "repo://backend/internal/automation/demo-library/web-image-generate-download",
+    "ref": "HEAD",
+    "path": "web-image-generate-download"
+  }
+}

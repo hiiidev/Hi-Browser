@@ -135,6 +135,230 @@ module.exports.run = async ({ launch, connect, selector, params, log, artifact }
 	}
 }
 
+func TestRunScriptTaskOpenPageCreatesFreshPageAndGrantsPermissions(t *testing.T) {
+	nodeExecPath := lookupNodeExecutable(t)
+
+	cfg := config.DefaultConfig()
+	cfg.Automation.Enabled = true
+	cfg.Automation.NodeSource = config.AutomationNodeSourceSystem
+	cfg.Automation.SystemNodePath = nodeExecPath
+	cfg.Automation.NodeVersion = "test-node"
+	cfg.Automation.PlaywrightCoreVersion = "1.59.0"
+	cfg.Automation.RuntimeVersion = "test-runtime"
+
+	manager := NewManager(t.TempDir(), cfg, nil, Options{})
+
+	state := manager.CurrentState()
+	if err := writeRunnerScript(state.RunnerPath); err != nil {
+		t.Fatalf("write runner script failed: %v", err)
+	}
+	if err := writeMockPlaywrightModule(state.RuntimeDir, cfg.Automation.PlaywrightCoreVersion); err != nil {
+		t.Fatalf("write mock playwright module failed: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"profileId": "profile-script",
+			"debugPort": 9333,
+			"cdpUrl":    "http://127.0.0.1:9333",
+		})
+	}))
+	defer server.Close()
+
+	scriptDir := filepath.Join(state.RuntimeDir, "tmp", "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir failed: %v", err)
+	}
+	scriptPath := filepath.Join(scriptDir, "script-open-page.cjs")
+	scriptSource := `module.exports.run = async ({ launch, connect, openPage, selector, params }) => {
+  const session = await launch({
+    selector,
+    startUrls: [params.url],
+    skipDefaultStartUrls: true,
+  })
+
+  const connection = await connect(session)
+  const opened = await openPage(connection, {
+    url: params.url,
+    timeoutMs: params.timeoutMs || 30000,
+    permissions: ['notifications'],
+  })
+
+  return {
+    ok: true,
+    summary: 'openPage helper ok',
+    url: opened.page.url(),
+    permissionApplied: opened.permissionResult.applied,
+    permissionOrigin: opened.permissionResult.origin,
+    permissionStrategy: opened.permissionResult.strategy || '',
+    reusedPage: opened.reusedPage,
+  }
+}`
+	if err := os.WriteFile(scriptPath, []byte(scriptSource), 0o644); err != nil {
+		t.Fatalf("write script failed: %v", err)
+	}
+
+	result, err := manager.RunScriptTask(context.Background(), ScriptTaskRequest{
+		TaskKey:       "script:open-page",
+		ScriptPath:    scriptPath,
+		Selector:      map[string]any{"code": "BUYER_001"},
+		Params:        map[string]any{"url": "https://example.com/inbox", "timeoutMs": 30000},
+		LaunchBaseURL: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("RunScriptTask returned error: %v", err)
+	}
+
+	if !result.OK {
+		t.Fatalf("expected script task to succeed, got %+v", result)
+	}
+
+	parsed := map[string]any{}
+	if err := json.Unmarshal([]byte(result.ResultText), &parsed); err != nil {
+		t.Fatalf("parse result text failed: %v result=%s", err, result.ResultText)
+	}
+	if nested, ok := parsed["result"].(map[string]any); ok && len(nested) > 0 {
+		parsed = nested
+	}
+	if parsed["permissionApplied"] != true {
+		t.Fatalf("expected permissionApplied to be true, got %+v", parsed)
+	}
+	if parsed["permissionOrigin"] != "https://example.com" {
+		t.Fatalf("unexpected permissionOrigin: %+v", parsed)
+	}
+	if parsed["reusedPage"] != false {
+		t.Fatalf("expected reusedPage to be false, got %+v", parsed)
+	}
+	if parsed["url"] != "https://example.com/inbox" {
+		t.Fatalf("unexpected url: %+v", parsed)
+	}
+}
+
+func TestRunScriptTaskCallPageAPIUsesBrowserContext(t *testing.T) {
+	nodeExecPath := lookupNodeExecutable(t)
+
+	cfg := config.DefaultConfig()
+	cfg.Automation.Enabled = true
+	cfg.Automation.NodeSource = config.AutomationNodeSourceSystem
+	cfg.Automation.SystemNodePath = nodeExecPath
+	cfg.Automation.NodeVersion = "test-node"
+	cfg.Automation.PlaywrightCoreVersion = "1.59.0"
+	cfg.Automation.RuntimeVersion = "test-runtime"
+
+	manager := NewManager(t.TempDir(), cfg, nil, Options{})
+
+	state := manager.CurrentState()
+	if err := writeRunnerScript(state.RunnerPath); err != nil {
+		t.Fatalf("write runner script failed: %v", err)
+	}
+	if err := writeMockPlaywrightModule(state.RuntimeDir, cfg.Automation.PlaywrightCoreVersion); err != nil {
+		t.Fatalf("write mock playwright module failed: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"profileId": "profile-page-api",
+			"debugPort": 9333,
+			"cdpUrl":    "http://127.0.0.1:9333",
+		})
+	}))
+	defer server.Close()
+
+	scriptDir := filepath.Join(state.RuntimeDir, "tmp", "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir failed: %v", err)
+	}
+	scriptPath := filepath.Join(scriptDir, "script-page-api.cjs")
+	scriptSource := `module.exports.run = async ({ useBrowser, callPageAPI, browserFetch, selector, params }) => {
+  const runtime = await useBrowser({
+    selector,
+    startUrls: [params.url],
+    skipDefaultStartUrls: true,
+    url: params.url,
+    reuseCurrentPage: true,
+    timeoutMs: 30000,
+  })
+
+  const created = await callPageAPI(runtime, {
+    url: '/api/order/create',
+    method: 'POST',
+    query: {
+      source: 'automation',
+      tag: ['a', 'b'],
+    },
+    headers: {
+      'X-Test': 'page-api',
+    },
+    json: {
+      skuId: params.skuId,
+      count: 2,
+    },
+  })
+  const ping = await browserFetch(runtime.page, '/api/ping', { method: 'GET' })
+
+  return {
+    ok: true,
+    summary: 'page api helper ok',
+    status: created.status,
+    requestUrl: created.json.url,
+    method: created.json.method,
+    credentials: created.json.credentials,
+    contentType: created.json.headers['Content-Type'],
+    testHeader: created.json.headers['X-Test'],
+    requestBody: created.json.body,
+    pingMethod: ping.json.method,
+  }
+}`
+	if err := os.WriteFile(scriptPath, []byte(scriptSource), 0o644); err != nil {
+		t.Fatalf("write script failed: %v", err)
+	}
+
+	result, err := manager.RunScriptTask(context.Background(), ScriptTaskRequest{
+		TaskKey:       "script:page-api",
+		ScriptPath:    scriptPath,
+		Selector:      map[string]any{"code": "BUYER_001"},
+		Params:        map[string]any{"url": "https://example.com/app", "skuId": "sku-123"},
+		LaunchBaseURL: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("RunScriptTask returned error: %v", err)
+	}
+
+	if !result.OK {
+		t.Fatalf("expected script task to succeed, got %+v", result)
+	}
+
+	parsed := map[string]any{}
+	if err := json.Unmarshal([]byte(result.ResultText), &parsed); err != nil {
+		t.Fatalf("parse result text failed: %v result=%s", err, result.ResultText)
+	}
+	if nested, ok := parsed["result"].(map[string]any); ok && len(nested) > 0 {
+		parsed = nested
+	}
+	if parsed["status"] != float64(201) {
+		t.Fatalf("unexpected status: %+v", parsed)
+	}
+	if parsed["method"] != "POST" || parsed["pingMethod"] != "GET" {
+		t.Fatalf("unexpected methods: %+v", parsed)
+	}
+	if parsed["credentials"] != "include" {
+		t.Fatalf("expected credentials=include, got %+v", parsed)
+	}
+	if parsed["contentType"] != "application/json" || parsed["testHeader"] != "page-api" {
+		t.Fatalf("unexpected headers: %+v", parsed)
+	}
+	if !strings.Contains(fmt.Sprint(parsed["requestUrl"]), "/api/order/create?source=automation&tag=a&tag=b") {
+		t.Fatalf("unexpected requestUrl: %+v", parsed)
+	}
+	if !strings.Contains(fmt.Sprint(parsed["requestBody"]), `"skuId":"sku-123"`) {
+		t.Fatalf("unexpected requestBody: %+v", parsed)
+	}
+}
+
 func TestRunScriptTaskLaunchFiltersNonLaunchParams(t *testing.T) {
 	nodeExecPath := lookupNodeExecutable(t)
 
@@ -167,6 +391,8 @@ func TestRunScriptTaskLaunchFiltersNonLaunchParams(t *testing.T) {
 		Tags                 []string       `json:"tags"`
 		GroupID              string         `json:"groupId"`
 		MatchMode            string         `json:"matchMode"`
+		ProxyID              string         `json:"proxyId"`
+		ProxyConfig          string         `json:"proxyConfig"`
 		Selector             map[string]any `json:"selector"`
 		LaunchArgs           []string       `json:"launchArgs"`
 		StartURLs            []string       `json:"startUrls"`
@@ -243,6 +469,103 @@ func TestRunScriptTaskLaunchFiltersNonLaunchParams(t *testing.T) {
 	}
 	if receivedBody.Keyword != "" {
 		t.Fatalf("expected non-launch params to be filtered, got keyword=%q", receivedBody.Keyword)
+	}
+	if receivedBody.ProxyID != "" || receivedBody.ProxyConfig != "" {
+		t.Fatalf("expected proxy launch params to be empty, got %+v", receivedBody)
+	}
+}
+
+func TestRunScriptTaskLaunchPassesTemporaryProxyParams(t *testing.T) {
+	nodeExecPath := lookupNodeExecutable(t)
+
+	cfg := config.DefaultConfig()
+	cfg.Automation.Enabled = true
+	cfg.Automation.NodeSource = config.AutomationNodeSourceSystem
+	cfg.Automation.SystemNodePath = nodeExecPath
+	cfg.Automation.NodeVersion = "test-node"
+	cfg.Automation.PlaywrightCoreVersion = "1.59.0"
+	cfg.Automation.RuntimeVersion = "test-runtime"
+
+	manager := NewManager(t.TempDir(), cfg, nil, Options{})
+
+	state := manager.CurrentState()
+	if err := writeRunnerScript(state.RunnerPath); err != nil {
+		t.Fatalf("write runner script failed: %v", err)
+	}
+	if err := writeMockPlaywrightModule(state.RuntimeDir, cfg.Automation.PlaywrightCoreVersion); err != nil {
+		t.Fatalf("write mock playwright module failed: %v", err)
+	}
+
+	type launchRequestPayload struct {
+		ProxyID              string `json:"proxyId"`
+		ProxyConfig          string `json:"proxyConfig"`
+		SkipDefaultStartURLs bool   `json:"skipDefaultStartUrls"`
+	}
+
+	receivedBody := launchRequestPayload{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		if r.URL.Path != "/api/launch" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&receivedBody); err != nil {
+			t.Fatalf("decode launch request body failed: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"profileId": "profile-script",
+			"debugPort": 9333,
+			"cdpUrl":    "http://127.0.0.1:9333",
+		})
+	}))
+	defer server.Close()
+
+	scriptDir := filepath.Join(state.RuntimeDir, "tmp", "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir failed: %v", err)
+	}
+	scriptPath := filepath.Join(scriptDir, "script-launch-proxy.cjs")
+	scriptSource := `module.exports.run = async ({ launch }) => {
+  await launch({
+    proxyId: 'proxy-picked',
+    proxyConfig: 'socks5://127.0.0.1:1080',
+    skipDefaultStartUrls: true,
+  })
+
+  return {
+    ok: true,
+    summary: '脚本执行成功',
+  }
+}`
+	if err := os.WriteFile(scriptPath, []byte(scriptSource), 0o644); err != nil {
+		t.Fatalf("write script failed: %v", err)
+	}
+
+	result, err := manager.RunScriptTask(context.Background(), ScriptTaskRequest{
+		TaskKey:       "script:launch-proxy",
+		ScriptPath:    scriptPath,
+		LaunchBaseURL: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("RunScriptTask returned error: %v", err)
+	}
+
+	if !result.OK {
+		t.Fatalf("expected script task to succeed, got %+v", result)
+	}
+	if receivedBody.ProxyID != "proxy-picked" {
+		t.Fatalf("expected proxyId to be forwarded, got %+v", receivedBody)
+	}
+	if receivedBody.ProxyConfig != "socks5://127.0.0.1:1080" {
+		t.Fatalf("expected proxyConfig to be forwarded, got %+v", receivedBody)
+	}
+	if !receivedBody.SkipDefaultStartURLs {
+		t.Fatalf("expected skipDefaultStartUrls to stay true, got %+v", receivedBody)
 	}
 }
 
@@ -395,6 +718,71 @@ func TestRunScriptTaskClosesBrowserConnections(t *testing.T) {
 	}
 }
 
+func TestRunScriptTaskConnectHonorsPerCallTimeout(t *testing.T) {
+	nodeExecPath := lookupNodeExecutable(t)
+
+	cfg := config.DefaultConfig()
+	cfg.Automation.Enabled = true
+	cfg.Automation.NodeSource = config.AutomationNodeSourceSystem
+	cfg.Automation.SystemNodePath = nodeExecPath
+	cfg.Automation.NodeVersion = "test-node"
+	cfg.Automation.PlaywrightCoreVersion = "1.59.0"
+	cfg.Automation.RuntimeVersion = "test-runtime"
+
+	manager := NewManager(t.TempDir(), cfg, nil, Options{})
+
+	state := manager.CurrentState()
+	if err := writeRunnerScript(state.RunnerPath); err != nil {
+		t.Fatalf("write runner script failed: %v", err)
+	}
+	if err := writeMockPlaywrightModuleWithExpectedConnectTimeout(state.RuntimeDir, cfg.Automation.PlaywrightCoreVersion, 47000); err != nil {
+		t.Fatalf("write mock playwright module failed: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"profileId": "profile-timeout",
+			"debugPort": 9333,
+			"cdpUrl":    "http://127.0.0.1:9333",
+		})
+	}))
+	defer server.Close()
+
+	scriptDir := filepath.Join(state.RuntimeDir, "tmp", "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("create script dir failed: %v", err)
+	}
+	scriptPath := filepath.Join(scriptDir, "script-connect-timeout.cjs")
+	scriptSource := `module.exports.run = async ({ launch, connect, selector }) => {
+  const session = await launch({ selector })
+  const connection = await connect(session, { timeoutMs: 47000 })
+
+  return {
+    ok: true,
+    summary: '脚本执行成功',
+    connectedEndpoint: connection.session.cdpUrl,
+  }
+}`
+	if err := os.WriteFile(scriptPath, []byte(scriptSource), 0o644); err != nil {
+		t.Fatalf("write script failed: %v", err)
+	}
+
+	result, err := manager.RunScriptTask(context.Background(), ScriptTaskRequest{
+		TaskKey:       "script:connect-timeout",
+		ScriptPath:    scriptPath,
+		Selector:      map[string]any{"code": "DEMO_READY"},
+		LaunchBaseURL: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("RunScriptTask returned error: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("expected script task to succeed, got %+v", result)
+	}
+}
+
 func TestRunScriptTaskTerminatesHungScriptOnTimeout(t *testing.T) {
 	nodeExecPath := lookupNodeExecutable(t)
 
@@ -488,6 +876,61 @@ func writeMockPlaywrightModuleWithPersistentConnection(runtimeDir, version, expe
 	return writeMockPlaywrightModuleWithOptions(runtimeDir, version, expectedEndpoint, true)
 }
 
+func writeMockPlaywrightModuleWithExpectedConnectTimeout(runtimeDir, version string, expectedConnectTimeout int) error {
+	moduleDir := filepath.Join(runtimeDir, "node_modules", "playwright-core")
+	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
+		return err
+	}
+
+	packageJSON := fmt.Sprintf("{\"name\":\"playwright-core\",\"version\":\"%s\",\"main\":\"index.js\"}", version)
+	if err := os.WriteFile(filepath.Join(moduleDir, "package.json"), []byte(packageJSON), 0o644); err != nil {
+		return err
+	}
+
+	indexJS := fmt.Sprintf(`const expectedConnectTimeout = %d;
+
+const context = {
+  async grantPermissions() {},
+  async newPage() {
+    return {
+      async goto() {},
+      async bringToFront() {},
+      async waitForLoadState() {},
+      async waitForTimeout() {},
+      async close() {},
+      isClosed() {
+        return false;
+      },
+      async title() {
+        return 'Mock Page Title';
+      },
+      url() {
+        return 'about:blank';
+      },
+    };
+  },
+  pages() {
+    return [];
+  },
+};
+
+exports.chromium = {
+  async connectOverCDP(endpoint, options = {}) {
+    if (options.timeout !== expectedConnectTimeout) {
+      throw new Error('unexpected connect timeout: ' + String(options.timeout));
+    }
+    return {
+      contexts() {
+        return [context];
+      },
+      async close() {},
+    };
+  },
+};
+`, expectedConnectTimeout)
+	return os.WriteFile(filepath.Join(moduleDir, "index.js"), []byte(indexJS), 0o644)
+}
+
 func writeMockPlaywrightModuleWithOptions(runtimeDir, version, expectedEndpoint string, persistentConnection bool) error {
 	moduleDir := filepath.Join(runtimeDir, "node_modules", "playwright-core")
 	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
@@ -519,9 +962,42 @@ function createPage() {
     async goto(url) {
       currentURL = url;
     },
+    async bringToFront() {},
+    async waitForLoadState() {},
     async waitForTimeout() {},
     async screenshot(options) {
       fs.writeFileSync(options.path, 'mock-screenshot');
+    },
+    async evaluate(fn, arg) {
+      const previousFetch = global.fetch;
+      global.fetch = async (url, init = {}) => {
+        return {
+          ok: String(init.method || 'GET').toUpperCase() !== 'DELETE',
+          status: String(init.method || 'GET').toUpperCase() === 'POST' ? 201 : 200,
+          statusText: String(init.method || 'GET').toUpperCase() === 'DELETE' ? 'Forbidden' : 'OK',
+          url: String(url),
+          headers: {
+            forEach(callback) {
+              callback('application/json', 'content-type');
+            },
+          },
+          async text() {
+            return JSON.stringify({
+              ok: true,
+              url: String(url),
+              method: String(init.method || 'GET').toUpperCase(),
+              credentials: init.credentials || '',
+              headers: init.headers || {},
+              body: init.body || '',
+            });
+          },
+        };
+      };
+      try {
+        return await fn(arg);
+      } finally {
+        global.fetch = previousFetch;
+      }
     },
     async title() {
       return 'Mock Page Title';
@@ -529,11 +1005,15 @@ function createPage() {
     url() {
       return currentURL;
     },
+    isClosed() {
+      return false;
+    },
     async close() {},
   };
 }
 
 const context = {
+  async grantPermissions() {},
   async newPage() {
     return createPage();
   },

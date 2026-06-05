@@ -185,12 +185,27 @@ func main() {
 	if startupDebugEnabled {
 		log.Printf("准备调用 wails.Run 创建 GUI 窗口")
 	}
-	err = wails.Run(&options.App{
-		Title:     cfg.App.Name,
+	windowBounds := resolveStartupWindowBounds(startupWindowBounds{
 		Width:     cfg.App.Window.Width,
 		Height:    cfg.App.Window.Height,
 		MinWidth:  cfg.App.Window.MinWidth,
 		MinHeight: cfg.App.Window.MinHeight,
+	})
+	if startupDebugEnabled {
+		log.Printf(
+			"窗口启动尺寸: width=%d height=%d minWidth=%d minHeight=%d",
+			windowBounds.Width,
+			windowBounds.Height,
+			windowBounds.MinWidth,
+			windowBounds.MinHeight,
+		)
+	}
+	err = wails.Run(&options.App{
+		Title:     cfg.App.Name,
+		Width:     windowBounds.Width,
+		Height:    windowBounds.Height,
+		MinWidth:  windowBounds.MinWidth,
+		MinHeight: windowBounds.MinHeight,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -201,6 +216,7 @@ func main() {
 				log.Printf("Wails OnStartup 已触发，GUI 宿主已创建")
 			}
 			wailsCtx = ctx
+			runtime.WindowCenter(wailsCtx)
 			// 启动系统托盘（非阻塞）
 			go backend.RunTray(backend.TrayCallbacks{
 				OnShow: func() {

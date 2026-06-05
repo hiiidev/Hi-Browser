@@ -13,6 +13,7 @@ func (a *App) GetBrowserSettings() BrowserSettings {
 		DefaultFingerprintArgs: append([]string{}, a.config.Browser.DefaultFingerprintArgs...),
 		DefaultLaunchArgs:      append([]string{}, a.config.Browser.DefaultLaunchArgs...),
 		DefaultStartURLs:       append([]string{}, a.config.Browser.DefaultStartURLs...),
+		LightStartEnabled:      browserLightStartEnabled(a.config),
 		RestoreLastSession:     a.config.Browser.RestoreLastSession,
 		StartReadyTimeoutMs:    browserStartReadyTimeoutMillis(a.config),
 		StartStableWindowMs:    browserStartStableWindowMillis(a.config),
@@ -29,6 +30,8 @@ func (a *App) SaveBrowserSettings(settings BrowserSettings) error {
 	} else if a.config.Browser.DefaultStartURLs == nil {
 		a.config.Browser.DefaultStartURLs = config.DefaultBrowserStartURLs()
 	}
+	lightStartEnabled := settings.LightStartEnabled
+	a.config.Browser.LightStartEnabled = &lightStartEnabled
 	a.config.Browser.RestoreLastSession = settings.RestoreLastSession
 	if settings.StartReadyTimeoutMs > 0 {
 		a.config.Browser.StartReadyTimeoutMs = settings.StartReadyTimeoutMs

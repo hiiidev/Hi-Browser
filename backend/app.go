@@ -42,6 +42,8 @@ type App struct {
 	maintenanceMu          sync.Mutex
 	bridgeMu               sync.Mutex
 	xrayBridgeRefs         map[string]string
+	deferredStartTargetsMu sync.Mutex
+	deferredStartTargets   map[string][]string
 	automationTargetMu     sync.Mutex
 	automationTargetCursor map[string]string
 	stopServicesOnce       sync.Once
@@ -58,6 +60,7 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		appRoot:                strings.TrimSpace(appRoot),
 		version:                version,
 		xrayBridgeRefs:         make(map[string]string),
+		deferredStartTargets:   make(map[string][]string),
 		automationTargetCursor: make(map[string]string),
 	}
 }

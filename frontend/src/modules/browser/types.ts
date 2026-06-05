@@ -40,6 +40,24 @@ export interface BrowserProfileInput {
   groupId?: string
 }
 
+export type BrowserProfileCopyMode = 'auto_fingerprint' | 'regular'
+
+export type BrowserProfileAutomationTarget =
+  | 'seed'
+  | 'identity'
+  | 'locale'
+  | 'screen'
+  | 'hardware'
+  | 'render'
+  | 'fonts'
+  | 'network'
+  | 'devices'
+
+export interface BrowserProfileCopyOptions {
+  mode: BrowserProfileCopyMode
+  automationTargets: BrowserProfileAutomationTarget[]
+}
+
 export interface BrowserTab {
   tabId: string
   title: string
@@ -52,6 +70,7 @@ export interface BrowserSettings {
   defaultFingerprintArgs: string[]
   defaultLaunchArgs: string[]
   defaultStartUrls: string[]
+  lightStartEnabled: boolean
   restoreLastSession: boolean
   startReadyTimeoutMs: number
   startStableWindowMs: number

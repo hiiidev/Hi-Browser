@@ -17,6 +17,7 @@ type BrowserCore = browser.Core
 type BrowserCoreInput = browser.CoreInput
 type BrowserCoreValidateResult = browser.CoreValidateResult
 type BrowserCoreExtendedInfo = browser.CoreExtendedInfo
+type BrowserProfileCopyOptions = browser.ProfileCopyOptions
 
 // BrowserProfileList 获取所有实例列表
 func (a *App) BrowserProfileList() []BrowserProfile { return a.browserMgr.List() }
@@ -49,6 +50,16 @@ func (a *App) BrowserProfileDelete(profileId string) error { return a.browserMgr
 // BrowserProfileCopy 复制实例配置（除指纹参数外全部复制）
 func (a *App) BrowserProfileCopy(profileId string, newName string) (*BrowserProfile, error) {
 	return a.browserMgr.Copy(profileId, newName)
+}
+
+// BrowserProfileCopyWithMode 按模式复制实例配置。
+func (a *App) BrowserProfileCopyWithMode(profileId string, newName string, mode string) (*BrowserProfile, error) {
+	return a.browserMgr.CopyWithMode(profileId, newName, mode)
+}
+
+// BrowserProfileCopyWithOptions 按结构化选项复制实例配置。
+func (a *App) BrowserProfileCopyWithOptions(profileId string, newName string, options BrowserProfileCopyOptions) (*BrowserProfile, error) {
+	return a.browserMgr.CopyWithOptions(profileId, newName, options)
 }
 
 // migrateToSQLite 一次性迁移：若 SQLite 表为空则从旧文件导入数据，或初始化默认数据

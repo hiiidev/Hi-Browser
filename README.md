@@ -1,4 +1,4 @@
-# Ant Browser
+﻿# Ant Browser
 
 > 面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具（Windows / Linux / macOS unsigned）。
 
@@ -152,17 +152,57 @@ Ant Browser 适合以下场景：
 
 1. 开发默认使用 `master` 分支；该分支不带测试用户数据，适合作为日常开发基线。
 2. 如需带测试库的演示环境，请切换到 `user_data` 分支。
-3. Windows 统一执行 `bat\dev.bat`；默认是稳定模式，如需前端 HMR 联调使用 `bat\dev.bat live`，如需受限内存复现使用 `bat\dev.bat limited`。
+3. Windows 统一执行 `bat\dev.bat`；默认是 `live` 热更新模式，如需静态资源排查使用 `bat\dev.bat stable`，如需受限内存复现使用 `bat\dev.bat limited`。
 4. Windows 运行时使用 `bin/xray.exe`、`bin/sing-box.exe`；Linux 运行时使用 `bin/linux-<arch>/xray`、`bin/linux-<arch>/sing-box`；macOS 运行时使用 `bin/darwin-<arch>/xray`、`bin/darwin-<arch>/sing-box`。
 5. 运行时文件采用“仓库固定 + 哈希校验”，校验清单在 `publish/runtime-manifest.json`，固定来源清单在 `publish/runtime-sources.json`。
 6. 如需刷新 Linux / macOS 运行时，执行 `python3 tools/runtime/sync-runtime.py --target <target>`（会按固定来源下载、校验归档并更新 manifest）。
 
 开发模式说明：
 
-- `bat\dev.bat`：默认稳定模式，先构建 `frontend/dist`，再以静态资源模式启动 Wails，不依赖外部 Vite dev server
-- `bat\dev.bat live`：显式启动 Vite watcher，并通过 `-frontenddevserverurl` 接入桌面壳
+- `bat\dev.bat`：默认 `live` 模式，启动 Vite watcher，并通过 `-frontenddevserverurl` 接入桌面壳
+- `bat\dev.bat stable`：先构建 `frontend/dist`，再以静态资源模式启动 Wails，不依赖外部 Vite dev server
+- `bat\dev.bat live`：显式指定 `live` 模式，效果与默认一致
 - `bat\dev.bat limited`：在 `live` 基础上为 watcher 与其子进程附加 Windows Job Object 内存限制
 - 如需为依赖下载配置代理，可在启动前设置 `DEV_PROXY_URL`、`DEV_NO_PROXY`、`DEV_GOPROXY`
+
+### 自动化脚本包
+
+自动化脚本现在分成两层：
+
+- 仓库里的可提交 demo 脚本库：`backend/internal/automation/demo-library/`
+- 本地运行时 / 用户自定义脚本：`data/automation/scripts/`
+
+规则是：
+
+- 只有 demo 脚本库里的脚本会提交到 git
+- `data/automation/scripts/` 下的运行时脚本统一忽略，不提交 git
+- 默认只同步三个 demo：`dual-instance-runtime-switch`、`news-query-txt`、`web-image-generate-download`
+
+脚本包采用“一脚本一目录”的可搬运结构：
+
+```text
+<script-id>/
+├── automation.script.json
+├── index.cjs
+└── 其他辅助文件
+```
+
+其中：
+
+- `automation.script.json`：脚本元数据和默认参数
+- `index.cjs`：入口脚本，`entryFile` 也可以改成相对路径，例如 `scripts/index.cjs`
+- 其他辅助文件：脚本依赖的本地模块、模板、静态资源
+
+运行时落盘结构和分发结构不同。应用内部会把脚本写到：
+
+```text
+data/automation/scripts/<script-id>/
+├── config
+├── index.cjs
+└── 其他辅助文件
+```
+
+这里的 `config` 是应用内部持久化格式；对外复制、导入、脚本库管理一律使用 `automation.script.json` 包结构。
 
 ### Linux 发布打包（源码）
 
@@ -261,7 +301,7 @@ chrome/
 
 - Releases：<https://github.com/black-ant/Ant-Browser/releases>
 - Issues：<https://github.com/black-ant/Ant-Browser/issues>
-- 友链：<https://linux.do/>
+- 感谢以下社区的支持：<https://linux.do/>
 
 ## License
 

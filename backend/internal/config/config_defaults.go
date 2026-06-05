@@ -110,6 +110,9 @@ func normalizeConfig(config *Config) {
 	} else if isLegacyVerificationStartURLs(config.Browser.DefaultStartURLs) {
 		config.Browser.DefaultStartURLs = []string{}
 	}
+	if config.Browser.LightStartEnabled == nil {
+		config.Browser.LightStartEnabled = defaultConfig.Browser.LightStartEnabled
+	}
 	if config.Browser.StartReadyTimeoutMs <= 0 {
 		config.Browser.StartReadyTimeoutMs = defaultConfig.Browser.StartReadyTimeoutMs
 	}
@@ -154,6 +157,7 @@ func normalizeConfig(config *Config) {
 		!config.Automation.KeepRuntimeOnDisable &&
 		strings.TrimSpace(config.Automation.InstallPolicy) == "" &&
 		strings.TrimSpace(config.Automation.RuntimeVersion) == "" &&
+		strings.TrimSpace(config.Automation.ArtifactsDir) == "" &&
 		strings.TrimSpace(config.Automation.NodeSource) == "" &&
 		strings.TrimSpace(config.Automation.SystemNodePath) == "" &&
 		strings.TrimSpace(config.Automation.NodeVersion) == "" &&
@@ -169,6 +173,11 @@ func normalizeConfig(config *Config) {
 		}
 		if strings.TrimSpace(config.Automation.PlaywrightCoreVersion) == "" {
 			config.Automation.PlaywrightCoreVersion = defaultConfig.Automation.PlaywrightCoreVersion
+		}
+		if strings.TrimSpace(config.Automation.ArtifactsDir) == "" {
+			config.Automation.ArtifactsDir = defaultConfig.Automation.ArtifactsDir
+		} else {
+			config.Automation.ArtifactsDir = strings.TrimSpace(config.Automation.ArtifactsDir)
 		}
 		config.Automation.NodeSource = normalizeAutomationNodeSource(config.Automation.NodeSource)
 		config.Automation.SystemNodePath = strings.TrimSpace(config.Automation.SystemNodePath)
@@ -233,6 +242,7 @@ func DefaultConfig() *Config {
 			DefaultFingerprintArgs: defaultFingerprintArgsForOS(goruntime.GOOS),
 			DefaultLaunchArgs:      []string{"--disable-sync", "--no-first-run"},
 			DefaultStartURLs:       DefaultBrowserStartURLs(),
+			LightStartEnabled:      boolPtr(true),
 			RestoreLastSession:     false,
 			StartReadyTimeoutMs:    3000,
 			StartStableWindowMs:    1200,
@@ -280,6 +290,7 @@ func DefaultConfig() *Config {
 			HeadlessDefault:       false,
 			KeepRuntimeOnDisable:  true,
 			AllowTypeScriptBuild:  false,
+			ArtifactsDir:          "data/automation/artifacts",
 			NodeSource:            DefaultAutomationNodeSource,
 			SystemNodePath:        "",
 			NodeVersion:           DefaultAutomationNodeVersion,
@@ -311,4 +322,9 @@ func normalizeAutomationNodeSource(value string) string {
 	default:
 		return AutomationNodeSourceAuto
 	}
+}
+
+func boolPtr(value bool) *bool {
+	v := value
+	return &v
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"ant-chrome/backend/internal/automation"
+	"ant-chrome/backend/internal/browser"
 )
 
 func automationSelectorProfileID(selector map[string]any) string {
@@ -17,16 +18,73 @@ func automationSelectorProfileID(selector map[string]any) string {
 	return strings.TrimSpace(profileID)
 }
 
-func (a *App) ensurePlaywrightTargetReady(selector map[string]any) error {
-	profileID := automationSelectorProfileID(selector)
-	if profileID == "" {
+func automationSelectorCode(selector map[string]any) string {
+	if selector == nil {
+		return ""
+	}
+
+	code, _ := selector["code"].(string)
+	return strings.ToUpper(strings.TrimSpace(code))
+}
+
+func cloneAutomationSelector(selector map[string]any) map[string]any {
+	if selector == nil {
 		return nil
 	}
 
-	if _, err := a.BrowserInstanceStart(profileID); err != nil {
-		return fmt.Errorf("预启动脚本目标实例失败: %w", err)
+	cloned := make(map[string]any, len(selector))
+	for key, value := range selector {
+		cloned[key] = value
 	}
-	return nil
+	return cloned
+}
+
+func (a *App) ensurePlaywrightTargetReady(selector map[string]any) (map[string]any, string, error) {
+	normalized := cloneAutomationSelector(selector)
+	profileID := automationSelectorProfileID(normalized)
+	code := automationSelectorCode(normalized)
+	if profileID == "" && code == "" {
+		return normalized, "", nil
+	}
+
+	var (
+		profile *browser.Profile
+		err     error
+	)
+	switch {
+	case profileID != "":
+		profile, err = a.BrowserInstanceStart(profileID)
+	case code != "":
+		profile, err = a.BrowserInstanceStartByCode(code)
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("预启动脚本目标实例失败: %w", err)
+	}
+	if profile == nil {
+		return nil, "", fmt.Errorf("预启动脚本目标实例失败：未返回实例")
+	}
+
+	resolvedProfileID := strings.TrimSpace(profile.ProfileId)
+	if resolvedProfileID != "" && normalized != nil {
+		normalized["profileId"] = resolvedProfileID
+	}
+
+	resolvedCode := strings.ToUpper(strings.TrimSpace(profile.LaunchCode))
+	if resolvedCode == "" {
+		resolvedCode = code
+	}
+	if resolvedCode != "" && normalized != nil {
+		normalized["code"] = resolvedCode
+	}
+
+	return normalized, resolvedProfileID, nil
+}
+
+func automationScriptTaskKey(scriptID string, selector map[string]any) string {
+	if profileID := automationSelectorProfileID(selector); profileID != "" {
+		return profileID
+	}
+	return "script:" + strings.TrimSpace(scriptID)
 }
 
 func (a *App) runPlaywrightScript(ctx context.Context, script automation.ScriptRecord, input automation.ScriptRunRequest) (string, string, string) {
@@ -60,7 +118,8 @@ func (a *App) runPlaywrightScript(ctx context.Context, script automation.ScriptR
 	if err != nil {
 		return "", "脚本执行失败", err.Error()
 	}
-	if err := a.ensurePlaywrightTargetReady(selector); err != nil {
+	selector, taskProfileID, err := a.ensurePlaywrightTargetReady(selector)
+	if err != nil {
 		return "", "脚本执行失败", err.Error()
 	}
 	if err := ctx.Err(); err != nil {
@@ -86,7 +145,7 @@ func (a *App) runPlaywrightScript(ctx context.Context, script automation.ScriptR
 	}
 
 	taskResult, err := a.automationMgr.RunScriptTask(ctx, automation.ScriptTaskRequest{
-		TaskKey:          "script:" + script.ID,
+		TaskKey:          automationScriptTaskKey(script.ID, selector),
 		ScriptPath:       scriptPath,
 		Selector:         selector,
 		Params:           params,
@@ -98,6 +157,9 @@ func (a *App) runPlaywrightScript(ctx context.Context, script automation.ScriptR
 	})
 	if err != nil {
 		return "", "脚本执行失败", err.Error()
+	}
+	if taskResult.TaskKey == "" && taskProfileID != "" {
+		taskResult.TaskKey = taskProfileID
 	}
 	if !taskResult.OK {
 		errorText := strings.TrimSpace(taskResult.Error)

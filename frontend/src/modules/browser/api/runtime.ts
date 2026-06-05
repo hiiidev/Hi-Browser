@@ -22,6 +22,7 @@ export function createDefaultBrowserSettings(): BrowserSettings {
     defaultFingerprintArgs: [],
     defaultLaunchArgs: [],
     defaultStartUrls: [],
+    lightStartEnabled: true,
     restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,

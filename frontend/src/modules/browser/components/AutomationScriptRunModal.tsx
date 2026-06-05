@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy, FileText, FolderOpen, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -7,28 +7,36 @@ import {
   FormItem,
   Input,
   Modal,
-  Select,
   Textarea,
   toast,
 } from "../../../shared/components";
-import {
-  copyBrowserProfile,
-  fetchBrowserProfiles,
-  openCorePath,
-} from "../api";
+import { fetchBrowserProfiles, fetchGroups, openCorePath } from "../api";
+import { AutomationInstanceSelector } from "./AutomationInstanceSelector";
 import { runAutomationScript } from "../automationScriptApi";
 import {
   DUAL_INSTANCE_RUNTIME_SCRIPT_ID,
+  applyAutomationScriptPublicAPIVariables,
+  collectAutomationScriptPublicAPIVariableValues,
+  createAutomationScriptTargetSelector,
   describeAutomationScriptTargetConfig,
   getAutomationScriptTypeLabel,
+  normalizeAutomationScriptTargetSelector,
+  resolveAutomationScriptPublicAPIConfig,
+  type AutomationScriptPublicAPIConfig,
   type AutomationScriptRecord,
   type AutomationScriptRunRecord,
+  type AutomationScriptTargetSelector,
 } from "../automationScripts";
+import { TargetSelectorEditor } from "../pages/automationScriptDetail/shared";
+import {
+  buildGroupOptions,
+  buildProfileSuggestions,
+} from "../pages/automationScriptDetail/helpers";
 import {
   type AutomationDemoSession,
 } from "../demoSession";
 import { useAutomationDemoSession } from "../hooks/useAutomationDemoSession";
-import type { BrowserProfile } from "../types";
+import type { BrowserGroupWithCount, BrowserProfile } from "../types";
 
 type DemoPreparationMode = "select" | "create";
 
@@ -53,6 +61,8 @@ interface AutomationScriptRunModalProps {
   dirty?: boolean;
   onClose: () => void;
 }
+
+type RunVariableInputs = Record<string, string>;
 
 const DEFAULT_DEMO_CREATE_DRAFT: DemoCreateDraft = {
   profileName: "",
@@ -247,12 +257,140 @@ function isPlaceholderSelectorText(text: string): boolean {
   }
 }
 
+function parseJsonObjectText(text: string): Record<string, unknown> {
+  const normalized = text.trim();
+  if (!normalized) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(normalized);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function mergeJsonObjectValues(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+  Object.entries(patch).forEach(([key, value]) => {
+    const baseValue = merged[key];
+    if (
+      baseValue &&
+      typeof baseValue === "object" &&
+      !Array.isArray(baseValue) &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      merged[key] = mergeJsonObjectValues(
+        baseValue as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+      return;
+    }
+    merged[key] = value;
+  });
+  return merged;
+}
+
+function buildPublicAPIVariableInputs(
+  config: AutomationScriptPublicAPIConfig,
+): RunVariableInputs {
+  return collectAutomationScriptPublicAPIVariableValues(config);
+}
+
+function buildParamsTextFromPublicAPIRequest(
+  config: AutomationScriptPublicAPIConfig,
+  values: RunVariableInputs,
+  fallbackParamsText: string,
+): { paramsText: string; missingRequired: string[]; usedVariables: string[] } {
+  const resolvedBody = applyAutomationScriptPublicAPIVariables(
+    config.requestBodyText,
+    config.variables,
+    values,
+  );
+  const body = parseJsonObjectText(resolvedBody.bodyText);
+  const fallbackParams = parseJsonObjectText(fallbackParamsText);
+  const requestParams =
+    config.requestMode === "params-only"
+      ? body
+      : body.params && typeof body.params === "object" && !Array.isArray(body.params)
+        ? (body.params as Record<string, unknown>)
+        : {};
+  const params =
+    Object.keys(requestParams).length > 0
+      ? mergeJsonObjectValues(fallbackParams, requestParams)
+      : fallbackParams;
+
+  return {
+    paramsText: JSON.stringify(params, null, 2),
+    missingRequired: resolvedBody.missingRequired,
+    usedVariables: resolvedBody.usedVariables,
+  };
+}
+
+function isCodeOnlySelectorForLaunchCode(
+  text: string,
+  launchCode: string,
+): boolean {
+  const normalizedCode = normalizeLaunchCode(launchCode);
+  const normalizedText = text.trim();
+  if (!normalizedCode || !normalizedText) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(normalizedText);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return false;
+    }
+
+    const entries = Object.entries(parsed as Record<string, unknown>).filter(
+      ([, value]) => {
+        if (value == null) {
+          return false;
+        }
+        if (typeof value === "string") {
+          return value.trim() !== "";
+        }
+        if (Array.isArray(value)) {
+          return value.length > 0;
+        }
+        return true;
+      },
+    );
+    if (entries.length !== 1 || entries[0]?.[0] !== "code") {
+      return false;
+    }
+
+    return normalizeLaunchCode(String(entries[0][1] || "")) === normalizedCode;
+  } catch {
+    return false;
+  }
+}
+
 function resolveInitialSelectorText(
   script: AutomationScriptRecord,
   demoSession: AutomationDemoSession,
 ): string {
-  if (script.targetConfig.mode !== "manual") {
+  if (
+    script.targetConfig.mode !== "manual" &&
+    script.targetConfig.mode !== "existing"
+  ) {
     return "";
+  }
+  if (script.targetConfig.mode === "existing") {
+    const selectorCode = normalizeLaunchCode(script.targetConfig.selector.code);
+    if (selectorCode) {
+      return buildDemoSelectorText(selectorCode);
+    }
   }
   const currentSelectorText = String(script.selectorText || "");
   if (
@@ -270,7 +408,10 @@ function resolveRunnableSelectorText(
   currentSelectorText: string,
   demoSession: AutomationDemoSession,
 ): string {
-  if (script.targetConfig.mode !== "manual") {
+  if (
+    script.targetConfig.mode !== "manual" &&
+    script.targetConfig.mode !== "existing"
+  ) {
     return currentSelectorText;
   }
   if (
@@ -396,8 +537,9 @@ export function AutomationScriptRunModal({
   const navigate = useNavigate();
   const [selectorText, setSelectorText] = useState("");
   const [paramsText, setParamsText] = useState("");
+  const [variableInputs, setVariableInputs] = useState<RunVariableInputs>({});
   const [running, setRunning] = useState(false);
-  const [demoBusy, setDemoBusy] = useState(false);
+  const demoBusy = false;
   const [lastRun, setLastRun] = useState<AutomationScriptRunRecord | null>(
     null,
   );
@@ -406,11 +548,17 @@ export function AutomationScriptRunModal({
     [],
   );
   const [templateProfiles, setTemplateProfiles] = useState<BrowserProfile[]>([]);
+  const [allProfiles, setAllProfiles] = useState<BrowserProfile[]>([]);
+  const [groups, setGroups] = useState<BrowserGroupWithCount[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [createDraft, setCreateDraft] = useState<DemoCreateDraft>(
     DEFAULT_DEMO_CREATE_DRAFT,
   );
+  const [rotateSelector, setRotateSelector] =
+    useState<AutomationScriptTargetSelector>(() =>
+      createAutomationScriptTargetSelector(),
+    );
   const {
     demoSession,
     setDemoSession,
@@ -420,16 +568,122 @@ export function AutomationScriptRunModal({
   const selectedProfile =
     availableProfiles.find((profile) => profile.profileId === selectedProfileId) ||
     null;
-  const selectedTemplateProfile =
-    templateProfiles.find(
-      (profile) => profile.profileId === createDraft.templateProfileId,
-    ) || null;
+  const selectorDetachedFromSelectedProfile =
+    demoMode === "select" &&
+    !!selectedProfile &&
+    !!selectorText.trim() &&
+    !isPlaceholderSelectorText(selectorText) &&
+    !isCodeOnlySelectorForLaunchCode(selectorText, selectedProfile.launchCode);
   const isDualInstanceRuntimeScript =
     script?.id === DUAL_INSTANCE_RUNTIME_SCRIPT_ID;
+  const isManualTargetMode =
+    !!script &&
+    (script.targetConfig.mode === "manual" || script.targetConfig.mode === "existing");
   const usesStoredTargetConfig =
-    !!script && script.targetConfig.mode !== "manual";
+    !!script && !isManualTargetMode;
   const showsSelectorInput =
     !!script && !usesStoredTargetConfig && !isDualInstanceRuntimeScript;
+  const selectedLaunchCode = resolveSelectorLaunchCode(selectorText);
+  const publicAPIConfig = useMemo(
+    () => (script ? resolveAutomationScriptPublicAPIConfig(script) : null),
+    [script],
+  );
+  const publicAPIVariables = publicAPIConfig?.variables || [];
+  const usedPublicAPIVariableNames = useMemo(() => {
+    if (!publicAPIConfig) {
+      return new Set<string>();
+    }
+    return new Set(
+      applyAutomationScriptPublicAPIVariables(
+        publicAPIConfig.requestBodyText,
+        publicAPIConfig.variables,
+        variableInputs,
+      ).usedVariables,
+    );
+  }, [publicAPIConfig, variableInputs]);
+  const hasPublicAPIVariables = publicAPIVariables.length > 0;
+  const hasUnusedPublicAPIVariables =
+    hasPublicAPIVariables &&
+    publicAPIVariables.some(
+      (variable) => !usedPublicAPIVariableNames.has(variable.name),
+    );
+  const codeSuggestions = buildProfileSuggestions(
+    allProfiles,
+    (profile) => profile.launchCode,
+    (profile) =>
+      profile.profileName
+        ? `${profile.launchCode || "未设 Code"} · ${profile.profileName}`
+        : profile.profileId,
+  );
+  const profileIdSuggestions = buildProfileSuggestions(
+    allProfiles,
+    (profile) => profile.profileId,
+    (profile) =>
+      profile.launchCode
+        ? `${profile.launchCode} · ${profile.profileName || profile.profileId}`
+        : profile.profileName || profile.profileId,
+  );
+  const profileNameSuggestions = buildProfileSuggestions(
+    allProfiles,
+    (profile) => profile.profileName,
+    (profile) =>
+      profile.launchCode
+        ? `${profile.launchCode} · ${profile.profileId}`
+        : profile.profileId,
+  );
+  const groupOptions = [{ value: "", label: "不限制" }, ...buildGroupOptions(groups)];
+  const syncParamsFromPublicAPIVariables = (
+    config: AutomationScriptPublicAPIConfig,
+    inputs: RunVariableInputs,
+    fallbackParamsText: string,
+  ) => {
+    const resolved = buildParamsTextFromPublicAPIRequest(
+      config,
+      inputs,
+      fallbackParamsText,
+    );
+    setParamsText(resolved.paramsText);
+    return resolved;
+  };
+  const updateVariableInput = (name: string, value: string) => {
+    setVariableInputs((current) => {
+      const nextInputs = {
+        ...current,
+        [name]: value,
+      };
+      if (publicAPIConfig) {
+        syncParamsFromPublicAPIVariables(
+          publicAPIConfig,
+          nextInputs,
+          script?.paramsText || paramsText,
+        );
+      }
+      return nextInputs;
+    });
+  };
+  const updateParamsText = (nextParamsText: string) => {
+    setParamsText(nextParamsText);
+  };
+  const updateRotateSelector = (
+    patch: Partial<AutomationScriptTargetSelector>,
+  ) => {
+    setRotateSelector((current) =>
+      normalizeAutomationScriptTargetSelector({
+        ...current,
+        ...patch,
+      }),
+    );
+  };
+  const resolveParamsTextForRun = (): string => {
+    if (!publicAPIConfig || !hasPublicAPIVariables) {
+      return paramsText;
+    }
+    return syncParamsFromPublicAPIVariables(
+      publicAPIConfig,
+      variableInputs,
+      script?.paramsText || paramsText,
+    ).paramsText;
+  };
   const paramsLabel = isDualInstanceRuntimeScript ? "启动配置" : "运行参数";
   const paramsFieldLabel = isDualInstanceRuntimeScript
     ? "浏览器列表 / 启动配置 JSON"
@@ -473,6 +727,7 @@ export function AutomationScriptRunModal({
     setProfilesLoading(true);
     try {
       const allProfiles = await fetchBrowserProfiles();
+      setAllProfiles(allProfiles);
       const profiles = filterSelectableProfiles(allProfiles);
       const nextSelectedProfileId =
         resolvePreferredProfileId(
@@ -483,7 +738,9 @@ export function AutomationScriptRunModal({
         (selectedProfileId &&
         profiles.some((profile) => profile.profileId === selectedProfileId)
           ? selectedProfileId
-          : profiles[0]?.profileId || "");
+          : isManualTargetMode
+            ? ""
+            : profiles[0]?.profileId || "");
       const nextSelectedProfile =
         profiles.find((profile) => profile.profileId === nextSelectedProfileId) ||
         null;
@@ -492,16 +749,26 @@ export function AutomationScriptRunModal({
       setTemplateProfiles(sortTemplateProfiles(allProfiles));
       setSelectedProfileId(nextSelectedProfileId);
       if (demoMode === "select" && nextSelectedProfile) {
+        const keepManualSelector =
+          !!selectorText.trim() &&
+          !isPlaceholderSelectorText(selectorText) &&
+          !isCodeOnlySelectorForLaunchCode(
+            selectorText,
+            nextSelectedProfile.launchCode,
+          );
         const nextSelectorText = buildDemoSelectorText(
           nextSelectedProfile.launchCode,
         );
         if (
+          !keepManualSelector &&
           resolveSelectorLaunchCode(selectorText) !==
           nextSelectedProfile.launchCode
         ) {
           setSelectorText(nextSelectorText);
         }
-        syncDemoSessionFromProfile(nextSelectedProfile, "选择已有实例");
+        if (!keepManualSelector) {
+          syncDemoSessionFromProfile(nextSelectedProfile, "选择实例");
+        }
       }
       setCreateDraft((current) => {
         if (
@@ -515,7 +782,7 @@ export function AutomationScriptRunModal({
           templateProfileId: allProfiles[0]?.profileId || "",
         };
       });
-      if (!profiles.length) {
+      if (!profiles.length && !isManualTargetMode) {
         setDemoMode("create");
       }
     } catch (error: unknown) {
@@ -530,6 +797,28 @@ export function AutomationScriptRunModal({
   };
 
   useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let disposed = false;
+    void fetchGroups().then(
+      (items) => {
+        if (!disposed) {
+          setGroups(items || []);
+        }
+      },
+      () => {
+        if (!disposed) {
+          setGroups([]);
+        }
+      },
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open || !script) {
       return;
     }
@@ -537,24 +826,38 @@ export function AutomationScriptRunModal({
     const nextDemoSession = reloadDemoSession();
     const nextSelectorText = resolveInitialSelectorText(script, nextDemoSession);
     setSelectorText(nextSelectorText);
-    setParamsText(script.paramsText || "");
+    const nextInputs = publicAPIConfig
+      ? buildPublicAPIVariableInputs(publicAPIConfig)
+      : {};
+    setVariableInputs(nextInputs);
+    if (publicAPIConfig && publicAPIConfig.variables.length > 0) {
+      syncParamsFromPublicAPIVariables(
+        publicAPIConfig,
+        nextInputs,
+        script.paramsText || "",
+      );
+    } else {
+      updateParamsText(script.paramsText || "");
+    }
     setLastRun(null);
-    setCreateDraft(DEFAULT_DEMO_CREATE_DRAFT);
+    setCreateDraft({
+      profileName: script.targetConfig.createNameTemplate || "",
+      templateProfileId: script.targetConfig.templateSelector.profileId || "",
+    });
+    setSelectedProfileId(script.targetConfig.selector.profileId || "");
+    setRotateSelector(
+      normalizeAutomationScriptTargetSelector(script.targetConfig.selector),
+    );
     setDemoMode(
       nextDemoSession.launchCode ||
         resolveSelectorLaunchCode(nextSelectorText)
         ? "select"
         : "create",
     );
-  }, [open, script]);
+  }, [open, script, publicAPIConfig]);
 
   useEffect(() => {
-    if (!open || !script || script.type !== "playwright-cdp") {
-      setAvailableProfiles([]);
-      setSelectedProfileId("");
-      return;
-    }
-    if (usesStoredTargetConfig) {
+    if (!open || !script) {
       setAvailableProfiles([]);
       setSelectedProfileId("");
       return;
@@ -563,7 +866,7 @@ export function AutomationScriptRunModal({
     const nextDemoSession = reloadDemoSession();
     const nextSelectorText = resolveInitialSelectorText(script, nextDemoSession);
     void refreshSelectableProfiles(
-      nextDemoSession.profileId,
+      script.targetConfig.selector.profileId || nextDemoSession.profileId,
       resolveSelectorLaunchCode(nextSelectorText) || nextDemoSession.launchCode,
       false,
     );
@@ -590,6 +893,52 @@ export function AutomationScriptRunModal({
     onClose();
   };
 
+  const buildRunTargetInput = (): Record<string, unknown> => {
+    if (!script || isManualTargetMode) {
+      return {};
+    }
+    if (script.targetConfig.mode === "create") {
+      return {
+        templateSelector: createDraft.templateProfileId
+          ? { profileId: createDraft.templateProfileId }
+          : {},
+        createNameTemplate: createDraft.profileName.trim(),
+      };
+    }
+    if (script.targetConfig.mode === "rotate") {
+      return rotateSelector as unknown as Record<string, unknown>;
+    }
+    return {};
+  };
+
+  const validateRunTargetInput = (): string => {
+    if (!script || isManualTargetMode) {
+      return "";
+    }
+    if (script.targetConfig.mode === "create") {
+      if (!createDraft.templateProfileId) {
+        return "先选择一个模板实例";
+      }
+      if (!createDraft.profileName.trim()) {
+        return "先输入新实例名称";
+      }
+    }
+    if (script.targetConfig.mode === "rotate") {
+      const selector = normalizeAutomationScriptTargetSelector(rotateSelector);
+      if (
+        !selector.code &&
+        !selector.profileId &&
+        !selector.profileName &&
+        !selector.groupId &&
+        selector.keywords.length === 0 &&
+        selector.tags.length === 0
+      ) {
+        return "先填写至少一个轮询条件";
+      }
+    }
+    return "";
+  };
+
   const executeRun = async (nextSelectorText: string, nextParamsText: string) => {
     if (!script) {
       return;
@@ -606,6 +955,7 @@ export function AutomationScriptRunModal({
       const run = await runAutomationScript({
         scriptId: script.id,
         selectorText: runnableSelectorText,
+        targetInput: buildRunTargetInput(),
         paramsText: nextParamsText,
         useScriptSelector: usesStoredTargetConfig,
         useScriptParams: false,
@@ -638,70 +988,38 @@ export function AutomationScriptRunModal({
     }
 
     setSelectorText(buildDemoSelectorText(profile.launchCode));
-    syncDemoSessionFromProfile(profile, "选择已有实例");
+    syncDemoSessionFromProfile(profile, "选择实例");
   };
 
-  const handleCreateProfileAndRun = async () => {
-    const paramsError = validateJsonObjectText(paramsText, paramsLabel, false);
-    if (paramsError) {
-      toast.warning(paramsError);
+  const handleLaunchCodeChange = (code: string) => {
+    const launchCode = normalizeLaunchCode(code);
+    setSelectorText(launchCode ? buildDemoSelectorText(launchCode) : "");
+    const profile =
+      availableProfiles.find((item) => item.launchCode === launchCode) || null;
+    setSelectedProfileId(profile?.profileId || "");
+    if (profile) {
+      syncDemoSessionFromProfile(profile, "填写实例 Code");
+    }
+  };
+
+  const handleSelectorTextChange = (value: string) => {
+    setSelectorText(value);
+    const launchCode = resolveSelectorLaunchCode(value);
+    const profile =
+      availableProfiles.find((item) => item.launchCode === launchCode) || null;
+    setSelectedProfileId(profile?.profileId || "");
+    if (profile) {
+      syncDemoSessionFromProfile(profile, "填写 selector");
+    }
+  };
+
+  const handleRestoreSelectedProfileSelector = () => {
+    if (!selectedProfile) {
       return;
     }
 
-    const profileName = createDraft.profileName.trim();
-    if (!profileName) {
-      toast.warning("先输入实例名称");
-      return;
-    }
-    if (!selectedTemplateProfile) {
-      toast.warning("先选择一个模板");
-      return;
-    }
-
-    setDemoBusy(true);
-    try {
-      const created = await copyBrowserProfile(
-        selectedTemplateProfile.profileId,
-        profileName,
-      );
-      if (!created) {
-        throw new Error("实例创建失败");
-      }
-
-      const launchCode = normalizeLaunchCode(created.launchCode);
-      if (!launchCode) {
-        throw new Error("新实例未生成启动 code");
-      }
-
-      setDemoSession((current) => ({
-        ...current,
-        profileId: created.profileId,
-        profileName: created.profileName,
-        launchCode,
-        cdpUrl: "",
-        debugPort: 0,
-        lastAction: "按模板创建实例",
-      }));
-
-      const nextSelectorText = buildDemoSelectorText(launchCode);
-      setSelectorText(nextSelectorText);
-      setDemoMode("select");
-      setCreateDraft((current) => ({
-        ...current,
-        profileName: "",
-      }));
-      await refreshSelectableProfiles(created.profileId, launchCode, false);
-      setDemoBusy(false);
-      toast.success("实例已创建，开始执行脚本");
-      await executeRun(nextSelectorText, paramsText);
-      return;
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "实例创建或启动失败";
-      toast.error(message);
-    } finally {
-      setDemoBusy(false);
-    }
+    setSelectorText(buildDemoSelectorText(selectedProfile.launchCode));
+    syncDemoSessionFromProfile(selectedProfile, "选择实例");
   };
 
   const handleRun = async () => {
@@ -716,14 +1034,6 @@ export function AutomationScriptRunModal({
           selectorText,
           demoSession,
         );
-    if (
-      script.type === "playwright-cdp" &&
-      !usesStoredTargetConfig &&
-      demoMode === "select" &&
-      selectedProfile
-    ) {
-      nextSelectorText = buildDemoSelectorText(selectedProfile.launchCode);
-    }
     const selectorError = usesStoredTargetConfig
       ? ""
       : validateJsonObjectText(
@@ -738,9 +1048,16 @@ export function AutomationScriptRunModal({
       return;
     }
 
-    const paramsError = validateJsonObjectText(paramsText, paramsLabel, false);
+    const nextParamsText = resolveParamsTextForRun();
+    const paramsError = validateJsonObjectText(nextParamsText, paramsLabel, false);
     if (paramsError) {
       toast.warning(paramsError);
+      return;
+    }
+
+    const targetInputError = validateRunTargetInput();
+    if (targetInputError) {
+      toast.warning(targetInputError);
       return;
     }
 
@@ -752,13 +1069,13 @@ export function AutomationScriptRunModal({
       if (demoMode === "select" && selectedProfile) {
         nextSelectorText = buildDemoSelectorText(selectedProfile.launchCode);
         setSelectorText(nextSelectorText);
-        syncDemoSessionFromProfile(selectedProfile, "选择已有实例");
+        syncDemoSessionFromProfile(selectedProfile, "选择实例");
         toast.success("已自动回填所选实例 selector");
       } else {
         toast.warning(
           demoMode === "create"
             ? "先创建一个实例，或填入可用 code"
-            : "先选择一个已有实例，或填入可用 code",
+            : "先选择实例，或填入可用 Code",
         );
         return;
       }
@@ -771,28 +1088,19 @@ export function AutomationScriptRunModal({
       script.type === "playwright-cdp" &&
       !usesStoredTargetConfig &&
       demoMode === "select" &&
-      selectedProfile
+      selectedProfile &&
+      !selectorDetachedFromSelectedProfile
     ) {
-      syncDemoSessionFromProfile(selectedProfile, "选择已有实例");
+      syncDemoSessionFromProfile(selectedProfile, "选择实例");
     }
 
-    await executeRun(nextSelectorText, paramsText);
+    await executeRun(nextSelectorText, nextParamsText);
   };
 
   const handlePrimaryAction = async () => {
     if (!script) {
       return;
     }
-
-    if (
-      script.type === "playwright-cdp" &&
-      !usesStoredTargetConfig &&
-      demoMode === "create"
-    ) {
-      await handleCreateProfileAndRun();
-      return;
-    }
-
     await handleRun();
   };
 
@@ -851,11 +1159,18 @@ export function AutomationScriptRunModal({
         </>
       }
     >
-      <div className="space-y-5">
-        <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] px-4 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-muted)] pb-3">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="max-w-[26rem] truncate text-sm font-semibold text-[var(--color-text-primary)]">
+                {script.name}
+              </div>
+              <span className="text-xs text-[var(--color-text-muted)]">
+                {formatDateTime(script.updatedAt)}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge
                   variant={script.type === "launch-api" ? "info" : "default"}
                   size="sm"
@@ -879,24 +1194,17 @@ export function AutomationScriptRunModal({
                       ? "停用"
                       : "草稿"}
                 </Badge>
-              </div>
-              <div className="mt-3 text-sm text-[var(--color-text-primary)]">
-                {script.name}
-              </div>
-              <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                最近更新 {formatDateTime(script.updatedAt)}
-              </div>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleOpenScriptDetail}
-              disabled={running || demoBusy}
-            >
-              <FileText className="h-4 w-4" />
-              查看脚本详情
-            </Button>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleOpenScriptDetail}
+            disabled={running || demoBusy}
+          >
+            <FileText className="h-4 w-4" />
+            脚本详情
+          </Button>
         </div>
 
         {dirty && (
@@ -913,145 +1221,186 @@ export function AutomationScriptRunModal({
               {describeAutomationScriptTargetConfig(script.targetConfig)}
             </div>
             <div className="mt-2 text-xs text-[var(--color-text-muted)]">
-              本次执行会直接沿用脚本里保存的目标策略，弹窗中不会覆盖 selector。
+              本次执行沿用脚本配置的实例策略，只填写本策略需要的执行配置。
             </div>
           </div>
         )}
 
-        {showDemoProfilePicker && (
-          <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-4 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-medium text-[var(--color-text-primary)]">
-                实例
-              </div>
-              <div className="inline-flex rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] p-1">
-                <button
-                  type="button"
-                  className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-                    demoMode === "select"
-                      ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow-sm"
-                      : "text-[var(--color-text-muted)]"
-                  }`}
-                  onClick={() => setDemoMode("select")}
-                  disabled={running || demoBusy}
-                >
-                  选择已有
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-                    demoMode === "create"
-                      ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow-sm"
-                      : "text-[var(--color-text-muted)]"
-                  }`}
-                  onClick={() => setDemoMode("create")}
-                  disabled={running || demoBusy}
-                >
-                  创建新的
-                </button>
-              </div>
-            </div>
+        {showDemoProfilePicker && isManualTargetMode ? (
+          <AutomationInstanceSelector
+            title="传入实例"
+            mode="manual"
+            modes={["manual"]}
+            loading={profilesLoading}
+            disabled={running || demoBusy}
+            selectedCode={selectedLaunchCode}
+            selectedProfileId={selectedProfileId}
+            profileOptions={selectableProfileOptions}
+            selectPlaceholder="暂无可选实例"
+            codePlaceholder="例如 BUYER_001"
+            onCodeChange={handleLaunchCodeChange}
+            onSelectProfile={handleSelectedProfileChange}
+            extra={
+              selectorDetachedFromSelectedProfile ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-3 py-2 text-xs text-[var(--color-text-secondary)]">
+                  <span>当前 selector 已手动修改，执行以下方 JSON 为准。</span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleRestoreSelectedProfileSelector}
+                    disabled={running || demoBusy || !selectedProfile}
+                  >
+                    恢复实例联动
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
+        ) : null}
 
-            {demoMode === "select" ? (
-              <div className="mt-4">
-                <Select
-                  value={selectedProfileId}
-                  onChange={(event) =>
-                    handleSelectedProfileChange(event.target.value)
-                  }
-                  options={
-                    selectableProfileOptions.length > 0
-                      ? selectableProfileOptions
-                      : [
-                          {
-                            value: "",
-                            label: profilesLoading ? "正在加载..." : "暂无可选实例",
-                          },
-                        ]
-                  }
-                  className="flex-1"
-                  disabled={
-                    running ||
-                    demoBusy ||
-                    selectableProfileOptions.length === 0
-                  }
-                />
-              </div>
-            ) : (
-              <div className="mt-4 flex flex-col gap-2 xl:flex-row xl:items-center">
-                <Input
-                  value={createDraft.profileName}
-                  onChange={(event) =>
-                    setCreateDraft((current) => ({
-                      ...current,
-                      profileName: event.target.value,
-                    }))
-                  }
-                  placeholder="实例名称"
-                  className="xl:w-56"
-                  disabled={running || demoBusy}
-                />
-                <Select
-                  value={createDraft.templateProfileId}
-                  onChange={(event) =>
-                    setCreateDraft((current) => ({
-                      ...current,
-                      templateProfileId: event.target.value,
-                    }))
-                  }
-                  options={
-                    templateProfileOptions.length > 0
-                      ? templateProfileOptions
-                      : [
-                          {
-                            value: "",
-                            label: profilesLoading ? "正在加载模板..." : "暂无模板",
-                          },
-                        ]
-                  }
-                  className="flex-1"
-                  disabled={running || demoBusy || templateProfileOptions.length === 0}
-                />
-              </div>
-            )}
-          </div>
-        )}
+        {script.targetConfig.mode === "create" ? (
+          <AutomationInstanceSelector
+            title="模板创建"
+            mode="create"
+            modes={["create"]}
+            loading={profilesLoading}
+            disabled={running || demoBusy}
+            createName={createDraft.profileName}
+            templateProfileId={createDraft.templateProfileId}
+            templateOptions={templateProfileOptions}
+            templatePlaceholder="暂无模板"
+            onCreateNameChange={(profileName) =>
+              setCreateDraft((current) => ({
+                ...current,
+                profileName,
+              }))
+            }
+            onTemplateChange={(templateProfileId) =>
+              setCreateDraft((current) => ({
+                ...current,
+                templateProfileId,
+              }))
+            }
+          />
+        ) : null}
+
+        {script.targetConfig.mode === "rotate" ? (
+          <AutomationInstanceSelector
+            title="条件轮询"
+            mode="rotate"
+            modes={["rotate"]}
+            disabled={running || demoBusy}
+            extra={
+              <TargetSelectorEditor
+                selector={rotateSelector}
+                onChange={updateRotateSelector}
+                codeSuggestions={codeSuggestions}
+                profileIdSuggestions={profileIdSuggestions}
+                profileNameSuggestions={profileNameSuggestions}
+                groupOptions={groupOptions}
+                disabled={running || demoBusy}
+              />
+            }
+          />
+        ) : null}
+
+        {showDemoProfilePicker && !isManualTargetMode && demoMode === "select" ? (
+          <AutomationInstanceSelector
+            title="实例选择"
+            mode="select"
+            modes={["select"]}
+            loading={profilesLoading}
+            disabled={running || demoBusy}
+            selectedProfileId={selectedProfileId}
+            profileOptions={selectableProfileOptions}
+            selectPlaceholder="暂无可选实例"
+            hint="也可在下方手动填 selector。"
+            onSelectProfile={handleSelectedProfileChange}
+            extra={
+              selectorDetachedFromSelectedProfile ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-3 py-2 text-xs text-[var(--color-text-secondary)]">
+                  <span>当前 selector 已手动修改，执行以下方 JSON 为准。</span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleRestoreSelectedProfileSelector}
+                    disabled={running || demoBusy}
+                  >
+                    恢复实例联动
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
+        ) : null}
 
         {script.status === "disabled" ? (
           <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-4 py-4 text-sm text-[var(--color-text-secondary)]">
             该脚本当前处于停用状态，先把状态切回可用再执行。
           </div>
         ) : (
-          <div
-            className={
-              !showsSelectorInput
-                ? "grid grid-cols-1 gap-4"
-                : "grid grid-cols-1 gap-4 xl:grid-cols-2"
-            }
-          >
-            {showsSelectorInput && (
-              <FormItem label="目标选择器 JSON">
+          <div className="space-y-3">
+              {hasPublicAPIVariables ? (
+                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-4 py-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      接口变量
+                    </div>
+                    {hasUnusedPublicAPIVariables ? (
+                      <div className="text-xs text-[var(--color-text-muted)]">
+                        未引用变量不生效
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {publicAPIVariables.map((variable) => (
+                      <FormItem key={variable.name} label={variable.name}>
+                        <Input
+                          value={variableInputs[variable.name] || ""}
+                          onChange={(event) =>
+                            updateVariableInput(variable.name, event.target.value)
+                          }
+                          placeholder={variable.description || variable.defaultValue}
+                          className="h-10 rounded-lg"
+                          disabled={running || demoBusy}
+                        />
+                      </FormItem>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+            <div
+              className={
+                showsSelectorInput
+                  ? "grid grid-cols-1 gap-3 xl:grid-cols-2"
+                  : "grid grid-cols-1 gap-3"
+              }
+            >
+              {showsSelectorInput && (
+                <FormItem label="目标选择器 JSON">
+                  <Textarea
+                    rows={hasPublicAPIVariables ? 6 : 9}
+                    value={selectorText}
+                    onChange={(event) => handleSelectorTextChange(event.target.value)}
+                    className="font-mono text-xs"
+                    placeholder='{"code":"DEMO_ABC123"}'
+                    disabled={running || demoBusy}
+                  />
+                </FormItem>
+              )}
+
+              <FormItem label={paramsFieldLabel}>
                 <Textarea
-                  rows={12}
-                  value={selectorText}
-                  onChange={(event) => setSelectorText(event.target.value)}
-                  className="font-mono"
-                  placeholder='{"code":"DEMO_ABC123"}'
+                  rows={hasPublicAPIVariables ? 6 : 9}
+                  value={paramsText}
+                  onChange={(event) => updateParamsText(event.target.value)}
+                  className="font-mono text-xs"
+                  placeholder={paramsPlaceholder}
                   disabled={running || demoBusy}
                 />
               </FormItem>
-            )}
-
-            <FormItem label={paramsFieldLabel}>
-              <Textarea
-                rows={12}
-                value={paramsText}
-                onChange={(event) => setParamsText(event.target.value)}
-                className="font-mono"
-                placeholder={paramsPlaceholder}
-                disabled={running || demoBusy}
-              />
-            </FormItem>
+            </div>
           </div>
         )}
 

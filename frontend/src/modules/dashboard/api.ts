@@ -13,14 +13,22 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   if (bindings?.GetDashboardStats) {
     try {
       const data = await bindings.GetDashboardStats()
-      const licenseStatus = bindings.GetLicenseStatus ? await bindings.GetLicenseStatus() : { maxLimit: 20 }
+      let maxProfileLimit = Number(data?.maxProfileLimit) || 0
+      if (!maxProfileLimit && bindings.GetLicenseStatus) {
+        try {
+          const licenseStatus = await bindings.GetLicenseStatus()
+          maxProfileLimit = Number(licenseStatus?.maxLimit) || 0
+        } catch {
+          maxProfileLimit = 0
+        }
+      }
       return {
         totalInstances: data?.totalInstances ?? 0,
         runningInstances: data?.runningInstances ?? 0,
         proxyCount: data?.proxyCount ?? 0,
         coreCount: data?.coreCount ?? 0,
         memUsedMB: data?.memUsedMB ?? 0,
-        maxProfileLimit: licenseStatus?.maxLimit ?? 20,
+        maxProfileLimit: maxProfileLimit || 20,
         appVersion: data?.appVersion ?? 'unknown',
       }
     } catch (e) {

@@ -2,9 +2,11 @@ package backend
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"regexp"
 	"testing"
+	"time"
 )
 
 func TestAutomationDemoLaunchCodeFormat(t *testing.T) {
@@ -83,5 +85,40 @@ func TestDecodeAutomationDemoBodyFallsBackToRawText(t *testing.T) {
 	}
 	if payload["rawBody"] != "plain-text-response" {
 		t.Fatalf("expected rawBody fallback, got %#v", payload["rawBody"])
+	}
+}
+
+func TestAutomationDemoRequestContextAppliesDefaultTimeoutWithoutDeadline(t *testing.T) {
+	startedAt := time.Now()
+	ctx, cancel := automationDemoRequestContext(context.Background())
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected request context to contain a deadline")
+	}
+
+	timeout := deadline.Sub(startedAt)
+	if timeout < 9*time.Second || timeout > 11*time.Second {
+		t.Fatalf("expected default timeout near 10s, got %s", timeout)
+	}
+}
+
+func TestAutomationDemoRequestContextKeepsExistingDeadline(t *testing.T) {
+	wantDeadline := time.Now().Add(45 * time.Second)
+	parentCtx, parentCancel := context.WithDeadline(context.Background(), wantDeadline)
+	defer parentCancel()
+
+	ctx, cancel := automationDemoRequestContext(parentCtx)
+	defer cancel()
+
+	gotDeadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("expected existing deadline to be preserved")
+	}
+
+	diff := gotDeadline.Sub(wantDeadline)
+	if diff < -100*time.Millisecond || diff > 100*time.Millisecond {
+		t.Fatalf("expected preserved deadline %s, got %s", wantDeadline, gotDeadline)
 	}
 }

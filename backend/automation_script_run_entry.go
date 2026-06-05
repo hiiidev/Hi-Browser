@@ -40,7 +40,14 @@ func (a *App) AutomationScriptRunWithOptions(input automation.ScriptRunRequest) 
 		StartedAt: startedAt.Format(time.RFC3339),
 	}
 
-	script, err := a.automationScriptStore().Get(run.ScriptID)
+	store := a.automationScriptStore()
+	if err := a.ensureAutomationScriptDefaults(store); err != nil {
+		run.Summary = "脚本读取失败"
+		run.Error = err.Error()
+		return a.finalizeAutomationScriptRun(run, startedAt)
+	}
+
+	script, err := store.Get(run.ScriptID)
 	if err != nil {
 		run.Summary = "脚本读取失败"
 		run.Error = err.Error()

@@ -64,6 +64,57 @@ func TestPreparePlaywrightScriptWorkspaceCopiesScriptDirectory(t *testing.T) {
 	if info, err := os.Stat(artifactDir); err != nil || !info.IsDir() {
 		t.Fatalf("expected artifact dir to exist, got err=%v info=%v", err, info)
 	}
+	if !strings.Contains(filepath.ToSlash(artifactDir), "data/automation/artifacts/workspace-script/") {
+		t.Fatalf("expected default artifact dir under data/automation/artifacts, got %s", artifactDir)
+	}
+}
+
+func TestPreparePlaywrightScriptWorkspaceUsesConfiguredArtifactsDir(t *testing.T) {
+	appRoot := t.TempDir()
+	app := NewApp(appRoot)
+	customRoot := filepath.Join(t.TempDir(), "custom-artifacts")
+	app.config = DefaultConfig()
+	app.config.Automation.ArtifactsDir = customRoot
+
+	script := automation.ScriptRecord{
+		ID:         "custom-artifact-script",
+		Name:       "自定义输出脚本",
+		Type:       "playwright-cdp",
+		Status:     "ready",
+		EntryFile:  "index.cjs",
+		ScriptText: "module.exports.run = async () => ({ ok: true })",
+	}
+
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	_, artifactDir, cleanup, err := app.preparePlaywrightScriptWorkspace(runtimeDir, script)
+	if err != nil {
+		t.Fatalf("preparePlaywrightScriptWorkspace returned error: %v", err)
+	}
+	defer cleanup()
+
+	if !strings.HasPrefix(artifactDir, customRoot+string(os.PathSeparator)) {
+		t.Fatalf("expected artifact dir under custom root, got %s want-prefix %s", artifactDir, customRoot)
+	}
+	if info, err := os.Stat(artifactDir); err != nil || !info.IsDir() {
+		t.Fatalf("expected custom artifact dir to exist, got err=%v info=%v", err, info)
+	}
+	if !strings.Contains(filepath.ToSlash(artifactDir), "/custom-artifact-script/") {
+		t.Fatalf("expected artifact dir to include script id, got %s", artifactDir)
+	}
+
+	relativeApp := NewApp(appRoot)
+	relativeApp.config = DefaultConfig()
+	relativeApp.config.Automation.ArtifactsDir = "exports/automation"
+	_, relativeArtifactDir, relativeCleanup, err := relativeApp.preparePlaywrightScriptWorkspace(runtimeDir, script)
+	if err != nil {
+		t.Fatalf("preparePlaywrightScriptWorkspace with relative dir returned error: %v", err)
+	}
+	defer relativeCleanup()
+
+	expectedRelativeRoot := filepath.Join(appRoot, "exports", "automation")
+	if !strings.HasPrefix(relativeArtifactDir, expectedRelativeRoot+string(os.PathSeparator)) {
+		t.Fatalf("expected relative artifact dir under app root, got %s want-prefix %s", relativeArtifactDir, expectedRelativeRoot)
+	}
 }
 
 func TestPreparePlaywrightScriptWorkspaceFallsBackWhenScriptDirMissing(t *testing.T) {

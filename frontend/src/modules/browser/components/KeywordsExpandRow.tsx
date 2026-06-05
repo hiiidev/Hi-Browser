@@ -25,7 +25,7 @@ export function KeywordsExpandRow({ keywords, colSpan }: Props) {
         className="px-6 py-3 bg-[var(--color-bg-muted)]/30 border-b border-[var(--color-border-muted)]"
       >
         {!keywords?.length ? (
-          <span className="text-xs text-[var(--color-text-muted)] italic">暂无关键字</span>
+          <span className="text-xs text-[var(--color-text-muted)]">-</span>
         ) : (
           <div className="flex items-start gap-4">
             <div

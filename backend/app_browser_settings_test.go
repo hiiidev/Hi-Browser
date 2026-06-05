@@ -31,6 +31,7 @@ func TestSaveBrowserSettingsPreservesExistingStartTimingWhenOmitted(t *testing.T
 		UserDataRoot:           app.config.Browser.UserDataRoot,
 		DefaultFingerprintArgs: append([]string{}, app.config.Browser.DefaultFingerprintArgs...),
 		DefaultLaunchArgs:      append([]string{}, app.config.Browser.DefaultLaunchArgs...),
+		LightStartEnabled:      browserLightStartEnabled(app.config),
 	}); err != nil {
 		t.Fatalf("SaveBrowserSettings returned error: %v", err)
 	}
@@ -44,6 +45,9 @@ func TestSaveBrowserSettingsPreservesExistingStartTimingWhenOmitted(t *testing.T
 	if len(app.config.Browser.DefaultStartURLs) != len(config.DefaultBrowserStartURLs()) {
 		t.Fatalf("expected default start urls to be preserved, got %v", app.config.Browser.DefaultStartURLs)
 	}
+	if app.config.Browser.LightStartEnabled == nil || !*app.config.Browser.LightStartEnabled {
+		t.Fatal("expected light start setting to be preserved")
+	}
 }
 
 func TestSaveBrowserSettingsAppliesExplicitStartTiming(t *testing.T) {
@@ -55,6 +59,7 @@ func TestSaveBrowserSettingsAppliesExplicitStartTiming(t *testing.T) {
 		DefaultFingerprintArgs: append([]string{}, app.config.Browser.DefaultFingerprintArgs...),
 		DefaultLaunchArgs:      append([]string{}, app.config.Browser.DefaultLaunchArgs...),
 		DefaultStartURLs:       []string{},
+		LightStartEnabled:      false,
 		RestoreLastSession:     true,
 		StartReadyTimeoutMs:    18000,
 		StartStableWindowMs:    3000,
@@ -70,6 +75,9 @@ func TestSaveBrowserSettingsAppliesExplicitStartTiming(t *testing.T) {
 	}
 	if len(app.config.Browser.DefaultStartURLs) != 0 {
 		t.Fatalf("expected default start urls to be cleared, got %v", app.config.Browser.DefaultStartURLs)
+	}
+	if app.config.Browser.LightStartEnabled == nil || *app.config.Browser.LightStartEnabled {
+		t.Fatal("expected light start to be disabled")
 	}
 	if !app.config.Browser.RestoreLastSession {
 		t.Fatal("expected restore last session to be enabled")

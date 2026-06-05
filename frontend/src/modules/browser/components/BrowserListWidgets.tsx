@@ -138,7 +138,7 @@ export function KeywordInlineRow({ keywords }: KeywordInlineRowProps) {
   }, [keywords])
 
   if (!keywords?.length) {
-    return <span className="text-xs text-[var(--color-text-muted)] italic">暂无关键字</span>
+    return <span className="text-xs text-[var(--color-text-muted)]">-</span>
   }
 
   return (

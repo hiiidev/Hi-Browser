@@ -792,18 +792,21 @@ export const STRUCTURED_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       language: 'json',
       code: () => `{
   "ok": true,
-  "count": 1,
-  "items": [
-    {
-      "id": "news-query-txt",
-      "name": "查询新闻并写 TXT",
-      "type": "playwright-cdp",
-      "status": "ready",
-      "entryFile": "index.cjs",
-      "selector": { "code": "BUYER_001" },
-      "params": { "keyword": "OpenAI", "limit": 10 }
-    }
-  ]
+  "status": "success",
+  "data": {
+    "count": 1,
+    "items": [
+      {
+        "id": "news-query-txt",
+        "name": "查询新闻并写 TXT",
+        "type": "playwright-cdp",
+        "status": "ready",
+        "entryFile": "index.cjs",
+        "selector": { "code": "BUYER_001" },
+        "params": { "keyword": "OpenAI", "limit": 10 }
+      }
+    ]
+  }
 }`,
     },
     responseCodes: [
@@ -834,20 +837,23 @@ export const STRUCTURED_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       language: 'json',
       code: () => `{
   "ok": true,
-  "item": {
-    "id": "news-query-txt",
-    "name": "查询新闻并写 TXT",
-    "type": "playwright-cdp",
-    "status": "ready",
-    "entryFile": "index.cjs",
-    "selector": { "code": "BUYER_001" },
-    "params": { "keyword": "OpenAI", "limit": 10 },
-    "packageFormat": "ant-automation-script",
-    "manifestVersion": 1,
-    "source": {
-      "type": "git",
-      "uri": "https://example.com/repo.git",
-      "ref": "main"
+  "status": "success",
+  "data": {
+    "item": {
+      "id": "news-query-txt",
+      "name": "查询新闻并写 TXT",
+      "type": "playwright-cdp",
+      "status": "ready",
+      "entryFile": "index.cjs",
+      "selector": { "code": "BUYER_001" },
+      "params": { "keyword": "OpenAI", "limit": 10 },
+      "packageFormat": "ant-automation-script",
+      "manifestVersion": 1,
+      "source": {
+        "type": "git",
+        "uri": "https://example.com/repo.git",
+        "ref": "main"
+      }
     }
   }
 }`,
@@ -875,7 +881,7 @@ export const STRUCTURED_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       { name: 'params', type: 'object', required: false, location: 'Body', description: '覆盖脚本默认 params。' },
       { name: 'useScriptSelector', type: 'boolean', required: false, location: 'Body', description: '显式指定是否沿用脚本默认 selector。' },
       { name: 'useScriptParams', type: 'boolean', required: false, location: 'Body', description: '显式指定是否沿用脚本默认 params。' },
-      { name: 'timeoutMs', type: 'integer', required: false, location: 'Body', description: '本次脚本执行超时时间。' },
+      { name: 'timeoutMs', type: 'integer', required: false, location: 'Body', description: '本次脚本执行超时时间，范围 1000 到 1800000。' },
     ],
     requestExample: {
       language: 'bash',
@@ -892,20 +898,24 @@ export const STRUCTURED_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       language: 'json',
       code: () => `{
   "ok": true,
-  "run": {
-    "id": "run-1",
-    "scriptId": "news-query-txt",
-    "scriptName": "查询新闻并写 TXT",
-    "scriptType": "playwright-cdp",
-    "status": "success",
-    "summary": "已抓取 10 条新闻并写入 TXT",
-    "durationMs": 12034
+  "status": "success",
+  "data": {
+    "run": {
+      "id": "run-1",
+      "scriptId": "news-query-txt",
+      "scriptName": "查询新闻并写 TXT",
+      "scriptType": "playwright-cdp",
+      "status": "success",
+      "summary": "已抓取 10 条新闻并写入 TXT",
+      "durationMs": 12034
+    },
+    "summary": "已抓取 10 条新闻并写入 TXT"
   }
 }`,
     },
     responseCodes: [
       { code: '200', description: '执行成功。' },
-      { code: '400', description: 'scriptId 缺失或 selector / params 不是对象。' },
+      { code: '400', description: 'scriptId 缺失、selector / params 不是对象，或 timeoutMs 超出范围。' },
       { code: '500', description: '脚本执行失败。' },
     ],
     notes: [
@@ -933,17 +943,20 @@ export const STRUCTURED_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       language: 'json',
       code: () => `{
   "ok": true,
-  "count": 1,
-  "limit": 20,
-  "items": [
-    {
-      "id": "run-1",
-      "scriptId": "news-query-txt",
-      "status": "success",
-      "summary": "已抓取 10 条新闻并写入 TXT",
-      "durationMs": 12034
-    }
-  ]
+  "status": "success",
+  "data": {
+    "count": 1,
+    "limit": 20,
+    "items": [
+      {
+        "id": "run-1",
+        "scriptId": "news-query-txt",
+        "status": "success",
+        "summary": "已抓取 10 条新闻并写入 TXT",
+        "durationMs": 12034
+      }
+    ]
+  }
 }`,
     },
     responseCodes: [

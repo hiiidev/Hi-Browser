@@ -15,18 +15,113 @@ const defaultAutomationCreateNameTemplate = "${templateName}-${timestamp}"
 
 func (a *App) resolveAutomationEffectiveSelector(script automation.ScriptRecord, input automation.ScriptRunRequest, required bool) (map[string]any, string, error) {
 	overrideSelectorText := strings.TrimSpace(input.SelectorText)
-	if !input.UseScriptSelector && overrideSelectorText != "" {
+	if automationScriptTargetMode(script) == "manual" && !input.UseScriptSelector && overrideSelectorText != "" {
 		selector, err := parseAutomationJSONObject(overrideSelectorText, required)
 		return selector, "", err
 	}
 
-	if strings.TrimSpace(script.TargetConfig.Mode) != "" && !strings.EqualFold(script.TargetConfig.Mode, "manual") {
-		return a.resolveAutomationScriptTarget(script)
+	if automationScriptTargetMode(script) != "manual" {
+		targetInput := input.TargetInput
+		if targetInput == nil && !input.UseScriptSelector && overrideSelectorText != "" {
+			selector, err := parseAutomationJSONObject(overrideSelectorText, false)
+			if err != nil {
+				return nil, "", err
+			}
+			targetInput = selector
+		}
+		input.TargetInput = targetInput
+		effectiveScript, err := applyAutomationRunTargetInput(script, input.TargetInput)
+		if err != nil {
+			return nil, "", err
+		}
+		return a.resolveAutomationScriptTarget(effectiveScript)
 	}
 
 	selectorText := resolveAutomationRunJSONText(input.SelectorText, script.SelectorText, input.UseScriptSelector)
 	selector, err := parseAutomationJSONObject(selectorText, required)
 	return selector, "", err
+}
+
+func automationScriptTargetMode(script automation.ScriptRecord) string {
+	mode := strings.ToLower(strings.TrimSpace(script.TargetConfig.Mode))
+	switch mode {
+	case "existing", "create", "rotate":
+		return mode
+	default:
+		return "manual"
+	}
+}
+
+func applyAutomationRunTargetInput(script automation.ScriptRecord, value any) (automation.ScriptRecord, error) {
+	if value == nil {
+		return script, nil
+	}
+	payload, err := marshalAutomationRunTargetInput(value)
+	if err != nil {
+		return script, err
+	}
+	if len(payload) == 0 {
+		return script, nil
+	}
+
+	switch automationScriptTargetMode(script) {
+	case "existing":
+		selector, err := decodeAutomationRunTargetSelector(payload)
+		if err != nil {
+			return script, fmt.Errorf("已有实例配置无效: %w", err)
+		}
+		script.TargetConfig.Selector = selector
+	case "rotate":
+		selector, err := decodeAutomationRunTargetSelector(payload)
+		if err != nil {
+			return script, fmt.Errorf("条件轮询配置无效: %w", err)
+		}
+		script.TargetConfig.Selector = selector
+	case "create":
+		var input struct {
+			TemplateSelector   automation.ScriptTargetSelector `json:"templateSelector"`
+			Selector           automation.ScriptTargetSelector `json:"selector"`
+			CreateNameTemplate string                          `json:"createNameTemplate"`
+			ProfileName        string                          `json:"profileName"`
+		}
+		if err := json.Unmarshal(payload, &input); err != nil {
+			return script, fmt.Errorf("targetInput must be a JSON object")
+		}
+		selector := input.TemplateSelector
+		if automationTargetSelectorEmpty(normalizeAutomationTargetSelector(selector)) {
+			selector = input.Selector
+		}
+		script.TargetConfig.TemplateSelector = selector
+		if name := strings.TrimSpace(input.CreateNameTemplate); name != "" {
+			script.TargetConfig.CreateNameTemplate = name
+		} else if name := strings.TrimSpace(input.ProfileName); name != "" {
+			script.TargetConfig.CreateNameTemplate = name
+		}
+	}
+	return script, nil
+}
+
+func marshalAutomationRunTargetInput(value any) ([]byte, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("targetInput must be a JSON object")
+	}
+	var object map[string]any
+	if err := json.Unmarshal(data, &object); err != nil || object == nil {
+		return nil, fmt.Errorf("targetInput must be a JSON object")
+	}
+	if len(object) == 0 {
+		return nil, nil
+	}
+	return data, nil
+}
+
+func decodeAutomationRunTargetSelector(payload []byte) (automation.ScriptTargetSelector, error) {
+	var selector automation.ScriptTargetSelector
+	if err := json.Unmarshal(payload, &selector); err != nil {
+		return selector, fmt.Errorf("targetInput must be a JSON object")
+	}
+	return selector, nil
 }
 
 func (a *App) resolveAutomationScriptTarget(script automation.ScriptRecord) (map[string]any, string, error) {

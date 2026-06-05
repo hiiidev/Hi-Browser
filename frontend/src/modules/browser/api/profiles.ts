@@ -1,4 +1,6 @@
-import type { BrowserProfile, BrowserProfileInput } from '../types'
+import { applyBrowserProfileCopyOptionsToArgs, createBrowserProfileCopyOptions } from '../copyOptions'
+import { buildBrowserProfileCopyName } from '../copyName'
+import type { BrowserProfile, BrowserProfileCopyOptions, BrowserProfileInput } from '../types'
 import { getBindings, getMockProfiles, nowISOString, setMockProfiles } from './runtime'
 
 export async function fetchBrowserProfiles(): Promise<BrowserProfile[]> {
@@ -80,8 +82,18 @@ export async function deleteBrowserProfile(profileId: string): Promise<boolean> 
   return true
 }
 
-export async function copyBrowserProfile(profileId: string, newName: string): Promise<BrowserProfile | null> {
+export async function copyBrowserProfile(
+  profileId: string,
+  newName: string,
+  options: BrowserProfileCopyOptions = createBrowserProfileCopyOptions(),
+): Promise<BrowserProfile | null> {
   const bindings: any = await getBindings()
+  if (bindings?.BrowserProfileCopyWithOptions) {
+    return (await bindings.BrowserProfileCopyWithOptions(profileId, newName, options)) || null
+  }
+  if (bindings?.BrowserProfileCopyWithMode) {
+    return (await bindings.BrowserProfileCopyWithMode(profileId, newName, options.mode)) || null
+  }
   if (bindings?.BrowserProfileCopy) {
     return (await bindings.BrowserProfileCopy(profileId, newName)) || null
   }
@@ -96,8 +108,13 @@ export async function copyBrowserProfile(profileId: string, newName: string): Pr
   const copy: BrowserProfile = {
     ...source,
     profileId: `mock-${timestamp}`,
-    profileName: newName || `${source.profileName} (副本)`,
+    profileName: newName.trim() || buildBrowserProfileCopyName(source.profileName),
     userDataDir: `mock-${timestamp}`,
+    fingerprintArgs: applyBrowserProfileCopyOptionsToArgs(
+      source.fingerprintArgs || [],
+      [],
+      options,
+    ),
     launchCode,
     running: false,
     debugReady: false,

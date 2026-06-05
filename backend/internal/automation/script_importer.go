@@ -30,6 +30,7 @@ type scriptImportEnvelope struct {
 	ScriptText      string               `json:"scriptText"`
 	Notes           string               `json:"notes"`
 	TargetConfig    map[string]any       `json:"targetConfig"`
+	PublicAPI       map[string]any       `json:"publicAPI"`
 	Source          map[string]any       `json:"source"`
 	Files           []scriptTemplateFile `json:"files"`
 }

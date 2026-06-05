@@ -1,0 +1,9 @@
+*
+!.gitignore
+!README.md
+!dual-instance-runtime-switch/
+!dual-instance-runtime-switch/**
+!news-query-txt/
+!news-query-txt/**
+!web-image-generate-download/
+!web-image-generate-download/**

@@ -233,6 +233,7 @@ automation:
   headless_default: true
   keep_runtime_on_disable: false
   allow_typescript_build: true
+  artifacts_dir: D:/automation-outputs
   node_source: system
   system_node_path: C:/tools/node/node.exe
   node_version: 22.15.1
@@ -303,6 +304,9 @@ automation:
 	}
 	if !cfg.Automation.AllowTypeScriptBuild {
 		t.Fatalf("Automation.AllowTypeScriptBuild 显式 true 被覆盖")
+	}
+	if cfg.Automation.ArtifactsDir != "D:/automation-outputs" {
+		t.Fatalf("Automation.ArtifactsDir 显式配置被覆盖: got=%q", cfg.Automation.ArtifactsDir)
 	}
 }
 

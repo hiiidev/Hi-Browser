@@ -29,6 +29,7 @@ export function CoreManagementPage() {
     defaultFingerprintArgs: [],
     defaultLaunchArgs: [],
     defaultStartUrls: [],
+    lightStartEnabled: true,
     restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
@@ -39,6 +40,7 @@ export function CoreManagementPage() {
     defaultFingerprintArgs: '',
     defaultLaunchArgs: '',
     defaultStartUrls: '',
+    lightStartEnabled: true,
     restoreLastSession: false,
     startReadyTimeoutMs: 3000,
     startStableWindowMs: 1200,
@@ -356,6 +358,7 @@ export function CoreManagementPage() {
       defaultFingerprintArgs: settings.defaultFingerprintArgs.join('\n'),
       defaultLaunchArgs: settings.defaultLaunchArgs.join('\n'),
       defaultStartUrls: settings.defaultStartUrls.join('\n'),
+      lightStartEnabled: settings.lightStartEnabled,
       restoreLastSession: settings.restoreLastSession,
       startReadyTimeoutMs: settings.startReadyTimeoutMs,
       startStableWindowMs: settings.startStableWindowMs,
@@ -372,6 +375,7 @@ export function CoreManagementPage() {
         defaultFingerprintArgs: settingsForm.defaultFingerprintArgs.split('\n').map(s => s.trim()).filter(Boolean),
         defaultLaunchArgs: settingsForm.defaultLaunchArgs.split('\n').map(s => s.trim()).filter(Boolean),
         defaultStartUrls: settingsForm.defaultStartUrls.split('\n').map(s => s.trim()).filter(Boolean),
+        lightStartEnabled: settingsForm.lightStartEnabled,
         restoreLastSession: settingsForm.restoreLastSession,
         startReadyTimeoutMs: Math.max(1000, Number(settingsForm.startReadyTimeoutMs) || 3000),
         startStableWindowMs: Math.max(0, Number(settingsForm.startStableWindowMs) || 1200),
@@ -454,6 +458,10 @@ export function CoreManagementPage() {
             <p className="text-sm text-[var(--color-text-primary)]">{settings.restoreLastSession ? '开启' : '关闭'}</p>
           </div>
           <div>
+            <p className="text-xs text-[var(--color-text-muted)] mb-1">轻启动模式</p>
+            <p className="text-sm text-[var(--color-text-primary)]">{settings.lightStartEnabled ? '开启' : '关闭'}</p>
+          </div>
+          <div>
             <p className="text-xs text-[var(--color-text-muted)] mb-1">启动就绪超时</p>
             <p className="text-sm text-[var(--color-text-primary)]">{settings.startReadyTimeoutMs} ms</p>
           </div>
@@ -519,6 +527,15 @@ export function CoreManagementPage() {
               rows={4}
               placeholder="启动 URL"
             />
+          </FormItem>
+          <FormItem label="轻启动模式" hint="先起空白页，实例就绪后再打开默认页面">
+            <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
+              <span className="text-sm text-[var(--color-text-primary)]">延后打开启动页</span>
+              <Switch
+                checked={settingsForm.lightStartEnabled}
+                onChange={checked => setSettingsForm(prev => ({ ...prev, lightStartEnabled: checked }))}
+              />
+            </div>
           </FormItem>
           <FormItem label="恢复上次关闭的标签页" hint="关闭后只打开默认启动页或空白页">
             <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">

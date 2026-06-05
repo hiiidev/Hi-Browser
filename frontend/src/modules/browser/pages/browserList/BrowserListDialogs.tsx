@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
 import { ExternalLink, XCircle } from 'lucide-react'
-import { Button, FormItem, Input, Modal } from '../../../../shared/components'
+import { Button, Input, Modal } from '../../../../shared/components'
+import { BrowserProfileCopyForm } from '../../components/BrowserProfileCopyForm'
 import { KeywordsModal } from '../../components/KeywordsModal'
-import type { BrowserProfile } from '../../types'
+import type { BrowserProfile, BrowserProfileCopyOptions } from '../../types'
 
 interface BrowserListDialogsProps {
   proxyErrorModal: boolean
@@ -25,9 +26,12 @@ interface BrowserListDialogsProps {
   onOpenGithubStarGift: () => void
   copyModal: { open: boolean; profile: BrowserProfile | null }
   copyName: string
+  copyOptions: BrowserProfileCopyOptions
   onCopyNameChange: (value: string) => void
+  onCopyOptionsChange: (value: BrowserProfileCopyOptions) => void
   onCloseCopy: () => void
   onConfirmCopy: () => void
+  copyConfirmDisabled: boolean
   copying: boolean
   opError: string
   onCloseOpError: () => void
@@ -54,9 +58,12 @@ export function BrowserListDialogs({
   onOpenGithubStarGift,
   copyModal,
   copyName,
+  copyOptions,
   onCopyNameChange,
+  onCopyOptionsChange,
   onCloseCopy,
   onConfirmCopy,
+  copyConfirmDisabled,
   copying,
   opError,
   onCloseOpError,
@@ -163,27 +170,22 @@ export function BrowserListDialogs({
         open={copyModal.open}
         onClose={onCloseCopy}
         title="复制实例"
-        width="420px"
+        width="720px"
         footer={
           <>
             <Button variant="secondary" onClick={onCloseCopy}>取消</Button>
-            <Button onClick={onConfirmCopy} loading={copying}>确认复制</Button>
+            <Button onClick={onConfirmCopy} loading={copying} disabled={copyConfirmDisabled}>确认复制</Button>
           </>
         }
       >
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--color-text-muted)]">
-            复制实例将保留原有的代理、内核、启动参数、标签等配置，但会生成新的指纹种子。
-          </p>
-          <FormItem label="新实例名称" required>
-            <Input
-              value={copyName}
-              onChange={e => onCopyNameChange(e.target.value)}
-              placeholder="请输入新实例名称"
-              autoFocus
-            />
-          </FormItem>
-        </div>
+        <BrowserProfileCopyForm
+          sourceName={copyModal.profile?.profileName}
+          copyName={copyName}
+          copyOptions={copyOptions}
+          onCopyNameChange={onCopyNameChange}
+          onCopyOptionsChange={onCopyOptionsChange}
+          autoFocusName
+        />
       </Modal>
 
       <Modal

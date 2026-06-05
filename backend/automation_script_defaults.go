@@ -8,9 +8,18 @@ import (
 )
 
 const (
-	automationScriptDefaultsMarkerName       = "defaults-seeded-v2"
-	automationScriptDefaultsLegacyMarkerName = "defaults-seeded-v1"
+	automationScriptDefaultsMarkerName = "defaults-seeded-v9"
 )
+
+var automationScriptDefaultsLegacyMarkerNames = []string{
+	"defaults-seeded-v8",
+	"defaults-seeded-v7",
+	"defaults-seeded-v6",
+	"defaults-seeded-v5",
+	"defaults-seeded-v4",
+	"defaults-seeded-v3",
+	"defaults-seeded-v2",
+}
 
 func (a *App) automationScriptDefaultsMarkerPath(name string) string {
 	return a.resolveAppPath(filepath.ToSlash(filepath.Join("data", "automation", name)))
@@ -25,8 +34,13 @@ func (a *App) automationScriptDefaultsInitialized() bool {
 	return a.automationScriptDefaultsInitializedByName(automationScriptDefaultsMarkerName)
 }
 
-func (a *App) automationScriptDefaultsInitializedLegacy() bool {
-	return a.automationScriptDefaultsInitializedByName(automationScriptDefaultsLegacyMarkerName)
+func (a *App) automationScriptDefaultsInitializedAnyLegacy() bool {
+	for _, name := range automationScriptDefaultsLegacyMarkerNames {
+		if a.automationScriptDefaultsInitializedByName(name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) markAutomationScriptDefaultsInitialized() error {
@@ -38,7 +52,10 @@ func (a *App) markAutomationScriptDefaultsInitialized() error {
 }
 
 func (a *App) ensureAutomationScriptDefaults(store *automation.ScriptStore) error {
-	defaults := automation.DefaultScripts()
+	defaults, err := automation.DefaultScriptBundles()
+	if err != nil {
+		return err
+	}
 	items, err := store.List()
 	if err != nil {
 		return err
@@ -51,12 +68,12 @@ func (a *App) ensureAutomationScriptDefaults(store *automation.ScriptStore) erro
 
 	if len(items) == 0 {
 		// Keep legacy behavior for users that had deleted all defaults under v1.
-		if a.automationScriptDefaultsInitializedLegacy() {
+		if a.automationScriptDefaultsInitializedAnyLegacy() {
 			return a.markAutomationScriptDefaultsInitialized()
 		}
 
-		for _, record := range defaults {
-			if _, err := store.Save(record); err != nil {
+		for _, bundle := range defaults {
+			if _, err := store.ImportBundle(bundle); err != nil {
 				return err
 			}
 		}
@@ -64,16 +81,16 @@ func (a *App) ensureAutomationScriptDefaults(store *automation.ScriptStore) erro
 	}
 
 	// Migration from v1: existing scripts are present, add any missing built-in baselines once.
-	if a.automationScriptDefaultsInitializedLegacy() {
+	if a.automationScriptDefaultsInitializedAnyLegacy() {
 		existingIDs := make(map[string]struct{}, len(items))
 		for _, item := range items {
 			existingIDs[item.ID] = struct{}{}
 		}
-		for _, record := range defaults {
-			if _, exists := existingIDs[record.ID]; exists {
+		for _, bundle := range defaults {
+			if _, exists := existingIDs[bundle.Record.ID]; exists {
 				continue
 			}
-			if _, err := store.Save(record); err != nil {
+			if _, err := store.ImportBundle(bundle); err != nil {
 				return err
 			}
 		}

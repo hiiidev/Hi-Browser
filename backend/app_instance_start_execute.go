@@ -11,6 +11,7 @@ import (
 func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browserStartPlan) (*BrowserProfile, error) {
 	log := logger.New("Browser")
 	profile := plan.profile
+	a.clearDeferredStartTargets(input.ProfileID)
 
 	cmd := exec.Command(plan.chromeBinaryPath, plan.args...)
 	cmd.Dir = filepath.Dir(plan.chromeBinaryPath)
@@ -48,6 +49,20 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 			if plan.acquiredXrayBridgeKey != "" {
 				a.bindProfileXrayBridge(input.ProfileID, plan.acquiredXrayBridgeKey)
 				plan.releaseXrayBridge = false
+			}
+			if len(plan.deferredStartTargets) > 0 {
+				if err := openBrowserStartTargets(stableDebugPort, plan.deferredStartTargets); err != nil {
+					warning := deferredStartTargetsWarning(plan.deferredStartTargets, err)
+					profile.RuntimeWarning = warning
+					profile.LastError = ""
+					log.Warn("浏览器已就绪，但启动页延后打开失败",
+						logger.F("profile_id", input.ProfileID),
+						logger.F("debug_port", stableDebugPort),
+						logger.F("target_count", len(plan.deferredStartTargets)),
+						logger.F("error", err.Error()),
+						logger.F("warning", warning),
+					)
+				}
 			}
 
 			log.Info("实例启动",
@@ -97,6 +112,9 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 		runtimeWarning := browserDebugPendingWarning(plan.totalReadyTimeout)
 		pendingStartNotice = browserDebugPendingStartNotice(plan.totalReadyTimeout)
 		a.markProfileRunningLocked(input.ProfileID, profile, cmd, cmd.Process.Pid, plan.assignedDebugPort, false, runtimeWarning)
+		if len(plan.deferredStartTargets) > 0 {
+			a.storeDeferredStartTargets(input.ProfileID, plan.deferredStartTargets)
+		}
 		if plan.acquiredXrayBridgeKey != "" {
 			a.bindProfileXrayBridge(input.ProfileID, plan.acquiredXrayBridgeKey)
 			plan.releaseXrayBridge = false
@@ -120,10 +138,12 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 	}
 
 	if lastStartErr != nil {
+		a.clearDeferredStartTargets(input.ProfileID)
 		profile.LastError = lastStartErr.Error()
 		return profile, lastStartErr
 	}
 
+	a.clearDeferredStartTargets(input.ProfileID)
 	startErr := fmt.Errorf("实例启动失败：浏览器在等待窗口内仍未就绪")
 	profile.LastError = startErr.Error()
 	return profile, startErr

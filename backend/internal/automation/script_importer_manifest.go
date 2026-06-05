@@ -64,6 +64,9 @@ func buildImportedRecord(envelope scriptImportEnvelope, defaultName string, sour
 	if envelope.TargetConfig != nil {
 		descriptor["targetConfig"] = envelope.TargetConfig
 	}
+	if envelope.PublicAPI != nil {
+		descriptor["publicAPI"] = envelope.PublicAPI
+	}
 	if envelope.Selector != nil {
 		descriptor["selector"] = envelope.Selector
 	}
@@ -115,6 +118,7 @@ func buildImportedRecord(envelope scriptImportEnvelope, defaultName string, sour
 		ScriptText:      scriptText,
 		Notes:           mapStringValueAny(descriptor, "notes"),
 		TargetConfig:    mapScriptTargetConfigValue(descriptor["targetConfig"]),
+		PublicAPI:       mapScriptPublicAPIValue(descriptor["publicAPI"]),
 		Source:          source,
 		CreatedAt:       now,
 		UpdatedAt:       now,

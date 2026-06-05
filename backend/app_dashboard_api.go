@@ -7,7 +7,10 @@ import (
 )
 
 func (a *App) GetDashboardStats() map[string]interface{} {
-	profiles := a.browserMgr.List()
+	profiles := []BrowserProfile{}
+	if a.browserMgr != nil {
+		profiles = a.browserMgr.List()
+	}
 	totalInstances := len(profiles)
 	runningInstances := 0
 	for _, profile := range profiles {
@@ -15,8 +18,17 @@ func (a *App) GetDashboardStats() map[string]interface{} {
 			runningInstances++
 		}
 	}
-	proxyCount := len(a.config.Browser.Proxies)
-	coreCount := len(a.config.Browser.Cores)
+
+	proxyCount := 0
+	coreCount := 0
+	maxProfileLimit := 20
+	if a.config != nil {
+		proxyCount = len(a.config.Browser.Proxies)
+		coreCount = len(a.config.Browser.Cores)
+		if a.config.App.MaxProfileLimit > 0 {
+			maxProfileLimit = a.config.App.MaxProfileLimit
+		}
+	}
 
 	var mem goruntime.MemStats
 	goruntime.ReadMemStats(&mem)
@@ -28,6 +40,7 @@ func (a *App) GetDashboardStats() map[string]interface{} {
 		"proxyCount":       proxyCount,
 		"coreCount":        coreCount,
 		"memUsedMB":        int(memUsedMB),
+		"maxProfileLimit":  maxProfileLimit,
 		"appVersion":       a.appVersion(),
 	}
 }

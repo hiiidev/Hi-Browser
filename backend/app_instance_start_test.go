@@ -540,6 +540,37 @@ func TestAppendLaunchTargetsPreservesSessionRestoreWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildBrowserLaunchArgsUsesNoProxyServerForDirectProxy(t *testing.T) {
+	t.Parallel()
+
+	profile := &BrowserProfile{
+		ProfileId: "profile-direct",
+	}
+
+	got := buildBrowserLaunchArgs(
+		profile,
+		`D:\profiles\direct`,
+		9222,
+		"direct://",
+		nil,
+		nil,
+		[]string{"about:blank"},
+	)
+
+	hasNoProxyServer := false
+	for _, arg := range got {
+		if arg == "--no-proxy-server" {
+			hasNoProxyServer = true
+		}
+		if arg == "--proxy-server=direct://" {
+			t.Fatalf("expected direct proxy launch args to avoid --proxy-server=direct://, got=%v", got)
+		}
+	}
+	if !hasNoProxyServer {
+		t.Fatalf("expected direct proxy to use --no-proxy-server, got=%v", got)
+	}
+}
+
 func mustListenLoopback(t *testing.T) net.Listener {
 	t.Helper()
 

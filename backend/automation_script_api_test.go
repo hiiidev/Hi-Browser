@@ -24,8 +24,8 @@ func TestAutomationScriptListSeedsDefaultScriptsOnFreshApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AutomationScriptList returned error: %v", err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("expected two default scripts, got %d", len(items))
+	if len(items) != 3 {
+		t.Fatalf("expected three default scripts, got %d", len(items))
 	}
 
 	byID := make(map[string]automation.ScriptRecord, len(items))
@@ -36,6 +36,7 @@ func TestAutomationScriptListSeedsDefaultScriptsOnFreshApp(t *testing.T) {
 	expectedNames := map[string]string{
 		"dual-instance-runtime-switch": "双实例启动与 Runtime 切换",
 		"news-query-txt":               "查询新闻并写 TXT",
+		"web-image-generate-download":  "网页图片生成并下载",
 	}
 
 	for scriptID, expectedName := range expectedNames {
@@ -48,6 +49,9 @@ func TestAutomationScriptListSeedsDefaultScriptsOnFreshApp(t *testing.T) {
 		}
 		if script.EntryFile != "index.cjs" {
 			t.Fatalf("unexpected default entry file for %q: %q", scriptID, script.EntryFile)
+		}
+		if script.Source.Type != "builtin" {
+			t.Fatalf("expected builtin source for %q, got %+v", scriptID, script.Source)
 		}
 
 		scriptDir := filepath.Join(app.resolveAppPath(filepath.ToSlash(filepath.Join("data", "automation", "scripts"))), script.ID)
@@ -79,6 +83,59 @@ func TestAutomationScriptListSeedsDefaultScriptsOnFreshApp(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("expected deleted default script not to be re-seeded, got %d items", len(items))
+	}
+}
+
+func TestAutomationScriptListAddsMissingBuiltinWhenLegacyMarkerExists(t *testing.T) {
+	app := NewApp(t.TempDir())
+
+	if _, err := app.AutomationScriptSave(automation.ScriptRecord{
+		ID:         "custom-script",
+		Name:       "自定义脚本",
+		Type:       "playwright-cdp",
+		Status:     "ready",
+		EntryFile:  "index.cjs",
+		ScriptText: "module.exports.run = async () => ({ ok: true })",
+	}); err != nil {
+		t.Fatalf("AutomationScriptSave returned error: %v", err)
+	}
+
+	legacyMarkerPath := app.automationScriptDefaultsMarkerPath("defaults-seeded-v7")
+	if err := os.MkdirAll(filepath.Dir(legacyMarkerPath), 0o755); err != nil {
+		t.Fatalf("create legacy marker dir failed: %v", err)
+	}
+	if err := os.WriteFile(legacyMarkerPath, []byte("ok\n"), 0o644); err != nil {
+		t.Fatalf("write legacy marker failed: %v", err)
+	}
+
+	items, err := app.AutomationScriptList()
+	if err != nil {
+		t.Fatalf("AutomationScriptList returned error: %v", err)
+	}
+	if len(items) != 4 {
+		t.Fatalf("expected custom script plus three defaults, got %d items", len(items))
+	}
+
+	expectedDefaultIDs := []string{
+		automation.DualInstanceRuntimeScriptID,
+		automation.NewsQueryTXTScriptID,
+		automation.WebImageGenerateScriptID,
+	}
+	for _, scriptID := range expectedDefaultIDs {
+		found := false
+		for _, item := range items {
+			if item.ID == scriptID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected migrated default script %q to exist", scriptID)
+		}
+	}
+
+	if !app.automationScriptDefaultsInitialized() {
+		t.Fatalf("expected new defaults marker to be written")
 	}
 }
 
@@ -276,6 +333,37 @@ func TestAutomationScriptRunWithOptionsAllowsEmptySelectorForDualInstanceRuntime
 	}
 }
 
+func TestAutomationScriptRunWithOptionsSeedsDefaultScriptsOnFreshApp(t *testing.T) {
+	app := NewApp(t.TempDir())
+
+	run, err := app.AutomationScriptRunWithOptions(automation.ScriptRunRequest{
+		ScriptID:          automation.DualInstanceRuntimeScriptID,
+		UseScriptSelector: true,
+		UseScriptParams:   true,
+	})
+	if err != nil {
+		t.Fatalf("AutomationScriptRunWithOptions returned error: %v", err)
+	}
+	if run == nil {
+		t.Fatalf("AutomationScriptRunWithOptions returned nil result")
+	}
+	if run.ScriptID != automation.DualInstanceRuntimeScriptID {
+		t.Fatalf("unexpected script id: %+v", run)
+	}
+	if run.ScriptName != "双实例启动与 Runtime 切换" {
+		t.Fatalf("expected default script metadata to be hydrated, got %+v", run)
+	}
+	if run.ScriptType != "launch-api" {
+		t.Fatalf("expected default script type launch-api, got %+v", run)
+	}
+	if run.Summary == "脚本读取失败" {
+		t.Fatalf("expected direct run to seed defaults before execution, got %+v", run)
+	}
+	if strings.Contains(strings.ToLower(run.Error), "script not found") {
+		t.Fatalf("expected seeded default script, got %+v", run)
+	}
+}
+
 func TestAutomationScriptRefreshFromLocalFile(t *testing.T) {
 	app := NewApp(t.TempDir())
 
@@ -327,6 +415,64 @@ func TestAutomationScriptRefreshFromLocalFile(t *testing.T) {
 	}
 	if refreshed.Source.ImportedAt == "" {
 		t.Fatalf("expected refreshed source importedAt to be populated")
+	}
+}
+
+func TestAutomationScriptRefreshFromBuiltin(t *testing.T) {
+	app := NewApp(t.TempDir())
+
+	savedImportedAt := "2026-01-01T00:00:00Z"
+	saved, err := app.AutomationScriptSave(automation.ScriptRecord{
+		ID:         automation.NewsQueryTXTScriptID,
+		Name:       "旧新闻脚本",
+		Type:       "launch-api",
+		Status:     "ready",
+		EntryFile:  "index.cjs",
+		ScriptText: "module.exports.run = async () => ({ ok: false })",
+		Source: automation.ScriptSource{
+			Type:       "builtin",
+			URI:        "repo://backend/internal/automation/demo-library/news-query-txt",
+			Ref:        "HEAD",
+			Path:       automation.NewsQueryTXTScriptID,
+			ImportedAt: savedImportedAt,
+		},
+		PublicAPI: automation.ScriptPublicAPIConfig{
+			Enabled:     true,
+			Path:        "demo/news-refresh",
+			RequestMode: "params-only",
+		},
+	})
+	if err != nil {
+		t.Fatalf("AutomationScriptSave returned error: %v", err)
+	}
+
+	refreshed, err := app.AutomationScriptRefresh(saved.ID)
+	if err != nil {
+		t.Fatalf("AutomationScriptRefresh returned error: %v", err)
+	}
+	if refreshed == nil {
+		t.Fatalf("AutomationScriptRefresh returned nil result")
+	}
+	if refreshed.ID != saved.ID {
+		t.Fatalf("expected same script id, got %q want %q", refreshed.ID, saved.ID)
+	}
+	if refreshed.Status != "ready" {
+		t.Fatalf("expected status to be preserved, got %q", refreshed.Status)
+	}
+	if refreshed.Name != "查询新闻并写 TXT" {
+		t.Fatalf("expected builtin script name to be restored, got %q", refreshed.Name)
+	}
+	if !strings.Contains(refreshed.ScriptText, "acceptedItems") {
+		t.Fatalf("expected refreshed builtin script text to contain news filtering logic, got %q", refreshed.ScriptText)
+	}
+	if refreshed.Source.Type != "builtin" || refreshed.Source.Path != automation.NewsQueryTXTScriptID {
+		t.Fatalf("unexpected refreshed source: %+v", refreshed.Source)
+	}
+	if refreshed.Source.ImportedAt == "" || refreshed.Source.ImportedAt == savedImportedAt {
+		t.Fatalf("expected builtin refresh to update importedAt, got %+v", refreshed.Source)
+	}
+	if refreshed.PublicAPI.Path != "demo/news-refresh" || !refreshed.PublicAPI.Enabled {
+		t.Fatalf("expected public api config to be preserved on refresh, got %+v", refreshed.PublicAPI)
 	}
 }
 
@@ -385,6 +531,133 @@ func TestAutomationScriptRefreshFromLocalDirectory(t *testing.T) {
 	}
 	if !strings.Contains(refreshed.ScriptText, "helper.run()") {
 		t.Fatalf("expected refreshed script text from local directory, got %q", refreshed.ScriptText)
+	}
+}
+
+func TestImportAutomationLocalLibraryImportsAndUpdatesExistingSource(t *testing.T) {
+	app := NewApp(t.TempDir())
+	libraryRoot := filepath.Join(t.TempDir(), "script-library")
+
+	firstScriptDir := filepath.Join(libraryRoot, "first-script")
+	writeAutomationScriptLibraryPackage(t, firstScriptDir, `{
+  "name": "脚本一",
+  "type": "playwright-cdp",
+  "entryFile": "index.cjs"
+}`, "module.exports.run = async () => ({ ok: true, source: 'first-script' })")
+
+	secondScriptDir := filepath.Join(libraryRoot, "second-script")
+	if err := os.MkdirAll(secondScriptDir, 0o755); err != nil {
+		t.Fatalf("create second script dir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(secondScriptDir, "index.cjs"), []byte("module.exports.run = async () => ({ ok: true, source: 'second-script' })"), 0o644); err != nil {
+		t.Fatalf("write second script entry failed: %v", err)
+	}
+
+	existing, err := app.AutomationScriptSave(automation.ScriptRecord{
+		ID:         "existing-local-library-script",
+		Name:       "旧脚本一",
+		Type:       "launch-api",
+		Status:     "disabled",
+		EntryFile:  "index.cjs",
+		ScriptText: "module.exports.run = async () => ({ ok: false })",
+		Source: automation.ScriptSource{
+			Type: "local-dir",
+			URI:  firstScriptDir,
+		},
+		PublicAPI: automation.ScriptPublicAPIConfig{
+			Enabled: true,
+			Path:    "library/existing-script",
+		},
+	})
+	if err != nil {
+		t.Fatalf("AutomationScriptSave returned error: %v", err)
+	}
+
+	result, err := app.importAutomationLocalLibrary(libraryRoot)
+	if err != nil {
+		t.Fatalf("importAutomationLocalLibrary returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatalf("importAutomationLocalLibrary returned nil result")
+	}
+	if result.Scanned != 2 {
+		t.Fatalf("expected scanned count 2, got %d", result.Scanned)
+	}
+	if len(result.Imported) != 2 {
+		t.Fatalf("expected two imported scripts, got %d", len(result.Imported))
+	}
+	if len(result.Failed) != 0 {
+		t.Fatalf("expected no failed imports, got %+v", result.Failed)
+	}
+
+	updatedFirst, err := app.AutomationScriptGet(existing.ID)
+	if err != nil {
+		t.Fatalf("AutomationScriptGet returned error: %v", err)
+	}
+	if updatedFirst.Name != "脚本一" {
+		t.Fatalf("expected existing script to be refreshed from library, got %q", updatedFirst.Name)
+	}
+	if updatedFirst.Status != "disabled" {
+		t.Fatalf("expected existing status to be preserved, got %q", updatedFirst.Status)
+	}
+	if updatedFirst.Source.Type != "local-dir" || updatedFirst.Source.URI != firstScriptDir {
+		t.Fatalf("unexpected updated source: %+v", updatedFirst.Source)
+	}
+	if !strings.Contains(updatedFirst.ScriptText, "first-script") {
+		t.Fatalf("expected refreshed first script body, got %q", updatedFirst.ScriptText)
+	}
+	if updatedFirst.PublicAPI.Path != "library/existing-script" || !updatedFirst.PublicAPI.Enabled {
+		t.Fatalf("expected existing public api config to be preserved, got %+v", updatedFirst.PublicAPI)
+	}
+
+	allScripts, err := app.automationScriptStore().List()
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(allScripts) != 2 {
+		t.Fatalf("expected two stored scripts after upsert, got %d", len(allScripts))
+	}
+}
+
+func TestImportAutomationLocalLibraryContinuesOnSinglePackageFailure(t *testing.T) {
+	app := NewApp(t.TempDir())
+	libraryRoot := filepath.Join(t.TempDir(), "script-library")
+
+	goodDir := filepath.Join(libraryRoot, "good-script")
+	writeAutomationScriptLibraryPackage(t, goodDir, `{
+  "name": "好脚本",
+  "type": "playwright-cdp",
+  "entryFile": "index.cjs"
+}`, "module.exports.run = async () => ({ ok: true, source: 'good-script' })")
+
+	badDir := filepath.Join(libraryRoot, "bad-script")
+	writeAutomationScriptLibraryPackage(t, badDir, `{
+  "name": "坏脚本",
+  "type": "playwright-cdp",
+  "entryFile": "missing.cjs"
+}`, "")
+
+	result, err := app.importAutomationLocalLibrary(libraryRoot)
+	if err != nil {
+		t.Fatalf("importAutomationLocalLibrary returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatalf("importAutomationLocalLibrary returned nil result")
+	}
+	if result.Scanned != 2 {
+		t.Fatalf("expected scanned count 2, got %d", result.Scanned)
+	}
+	if len(result.Imported) != 1 {
+		t.Fatalf("expected one imported script, got %d", len(result.Imported))
+	}
+	if len(result.Failed) != 1 {
+		t.Fatalf("expected one failed script, got %+v", result.Failed)
+	}
+	if result.Failed[0].Path != badDir {
+		t.Fatalf("unexpected failed path: %+v", result.Failed[0])
+	}
+	if !strings.Contains(result.Failed[0].Message, "entry file missing.cjs not found") {
+		t.Fatalf("unexpected failed message: %+v", result.Failed[0])
 	}
 }
 
@@ -732,4 +1005,22 @@ func buildAutomationZipBytesForTest(t *testing.T, files map[string]string) []byt
 		t.Fatalf("close zip writer failed: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func writeAutomationScriptLibraryPackage(t *testing.T, dir string, manifest string, entry string) {
+	t.Helper()
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create script library package dir failed: %v", err)
+	}
+	if strings.TrimSpace(manifest) != "" {
+		if err := os.WriteFile(filepath.Join(dir, "automation.script.json"), []byte(manifest), 0o644); err != nil {
+			t.Fatalf("write script library manifest failed: %v", err)
+		}
+	}
+	if strings.TrimSpace(entry) != "" {
+		if err := os.WriteFile(filepath.Join(dir, "index.cjs"), []byte(entry), 0o644); err != nil {
+			t.Fatalf("write script library entry failed: %v", err)
+		}
+	}
 }

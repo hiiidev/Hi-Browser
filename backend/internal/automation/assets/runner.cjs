@@ -15,6 +15,14 @@ function normalizeTimeout(value, fallback) {
   return fallback;
 }
 
+function isPlainObject(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function hasOwnProperty(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -210,6 +218,278 @@ function toSerializable(value, seen = new WeakSet()) {
   return inspectValue(value);
 }
 
+function normalizeOrigin(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return '';
+    }
+    return parsed.origin;
+  } catch {
+    return '';
+  }
+}
+
+function normalizePermissionList(value) {
+  const source = Array.isArray(value) ? value : value == null ? [] : [value];
+  const result = [];
+  const seen = new Set();
+
+  for (const item of source) {
+    const normalized = String(item || '').trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
+function normalizePageAPIHeaders(value) {
+  const headers = {};
+  if (!value) {
+    return headers;
+  }
+
+  if (typeof value.forEach === 'function') {
+    value.forEach((entryValue, entryKey) => {
+      const key = String(entryKey || '').trim();
+      if (key) {
+        headers[key] = String(entryValue);
+      }
+    });
+    return headers;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (!Array.isArray(entry) || entry.length < 2) {
+        continue;
+      }
+      const key = String(entry[0] || '').trim();
+      if (key) {
+        headers[key] = String(entry[1]);
+      }
+    }
+    return headers;
+  }
+
+  if (isPlainObject(value)) {
+    for (const [key, entryValue] of Object.entries(value)) {
+      const normalizedKey = String(key || '').trim();
+      if (normalizedKey && entryValue !== undefined && entryValue !== null) {
+        headers[normalizedKey] = String(entryValue);
+      }
+    }
+  }
+  return headers;
+}
+
+function setPageAPIHeaderIfAbsent(headers, key, value) {
+  const normalizedKey = String(key || '').trim();
+  if (!normalizedKey) {
+    return;
+  }
+  const lowerKey = normalizedKey.toLowerCase();
+  if (Object.keys(headers).some((existingKey) => existingKey.toLowerCase() === lowerKey)) {
+    return;
+  }
+  headers[normalizedKey] = value;
+}
+
+function appendPageAPIQuery(rawURL, query) {
+  if (!isPlainObject(query) && !Array.isArray(query)) {
+    return rawURL;
+  }
+
+  const searchParams = new URLSearchParams();
+  const appendEntry = (key, value) => {
+    const normalizedKey = String(key || '').trim();
+    if (!normalizedKey || value === undefined || value === null) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        appendEntry(normalizedKey, item);
+      }
+      return;
+    }
+    searchParams.append(normalizedKey, String(value));
+  };
+
+  if (Array.isArray(query)) {
+    for (const entry of query) {
+      if (Array.isArray(entry) && entry.length >= 2) {
+        appendEntry(entry[0], entry[1]);
+      }
+    }
+  } else {
+    for (const [key, value] of Object.entries(query)) {
+      appendEntry(key, value);
+    }
+  }
+
+  const queryText = searchParams.toString();
+  if (!queryText) {
+    return rawURL;
+  }
+
+  const hashIndex = rawURL.indexOf('#');
+  const baseURL = hashIndex >= 0 ? rawURL.slice(0, hashIndex) : rawURL;
+  const hash = hashIndex >= 0 ? rawURL.slice(hashIndex) : '';
+  const separator = baseURL.includes('?')
+    ? baseURL.endsWith('?') || baseURL.endsWith('&')
+      ? ''
+      : '&'
+    : '?';
+  return `${baseURL}${separator}${queryText}${hash}`;
+}
+
+function normalizePageAPICredentials(value) {
+  const normalized = String(value || '').trim();
+  if (['include', 'same-origin', 'omit'].includes(normalized)) {
+    return normalized;
+  }
+  return 'include';
+}
+
+function normalizePageAPIBody(source, headers) {
+  if (hasOwnProperty(source, 'bodyText')) {
+    return source.bodyText == null ? null : String(source.bodyText);
+  }
+
+  if (hasOwnProperty(source, 'json')) {
+    setPageAPIHeaderIfAbsent(headers, 'Content-Type', 'application/json');
+    return JSON.stringify(source.json == null ? null : source.json);
+  }
+
+  if (!hasOwnProperty(source, 'body')) {
+    return null;
+  }
+
+  const body = source.body;
+  if (body == null) {
+    return null;
+  }
+  if (typeof body === 'string') {
+    return body;
+  }
+  setPageAPIHeaderIfAbsent(headers, 'Content-Type', 'application/json');
+  return JSON.stringify(body);
+}
+
+function normalizePageAPIRequest(urlOrRequest, options = {}) {
+  const base = isPlainObject(urlOrRequest) ? urlOrRequest : { url: urlOrRequest };
+  const source = {
+    ...base,
+    ...(isPlainObject(options) ? options : {}),
+  };
+  const headers = normalizePageAPIHeaders(source.headers);
+  const bodyText = normalizePageAPIBody(source, headers);
+  const method = String(
+    source.method || (bodyText == null ? 'GET' : 'POST')
+  )
+    .trim()
+    .toUpperCase();
+  const url = appendPageAPIQuery(String(source.url || '').trim(), source.query || source.searchParams);
+
+  if (!url) {
+    throw new Error('page api url is required');
+  }
+  if ((method === 'GET' || method === 'HEAD') && bodyText != null) {
+    throw new Error(`${method} page api request cannot include a body`);
+  }
+
+  return {
+    url,
+    method,
+    headers,
+    credentials: normalizePageAPICredentials(source.credentials),
+    bodyText,
+    timeoutMs: normalizeTimeout(source.timeoutMs, 30000),
+    parseJSON: source.parseJSON !== false,
+    throwOnError: source.throwOnError === true || source.throwOnHTTPError === true,
+  };
+}
+
+async function executePageAPIRequest(request) {
+  const headers = request && request.headers && typeof request.headers === 'object'
+    ? request.headers
+    : {};
+  const init = {
+    method: request.method || 'GET',
+    headers,
+    credentials: request.credentials || 'include',
+  };
+
+  let timeoutID = null;
+  if (request.timeoutMs > 0 && typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    init.signal = controller.signal;
+    timeoutID = setTimeout(() => controller.abort(), request.timeoutMs);
+  }
+
+  if (request.bodyText !== null && request.bodyText !== undefined) {
+    init.body = request.bodyText;
+  }
+
+  try {
+    const response = await fetch(request.url, init);
+    const responseHeaders = {};
+    if (response.headers && typeof response.headers.forEach === 'function') {
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+    }
+
+    const bodyText = await response.text();
+    let bodyJSON = null;
+    let hasBodyJSON = false;
+    if (request.parseJSON !== false && String(bodyText || '').trim()) {
+      try {
+        bodyJSON = JSON.parse(bodyText);
+        hasBodyJSON = true;
+      } catch {}
+    }
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      url: response.url,
+      headers: responseHeaders,
+      bodyText,
+      bodyJSON: hasBodyJSON ? bodyJSON : null,
+      json: hasBodyJSON ? bodyJSON : null,
+      error: response.ok ? '' : response.statusText || `HTTP ${response.status}`,
+    };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return {
+      ok: false,
+      status: 0,
+      statusText: '',
+      url: request.url,
+      headers: {},
+      bodyText: '',
+      bodyJSON: null,
+      json: null,
+      error: message,
+    };
+  } finally {
+    if (timeoutID) {
+      clearTimeout(timeoutID);
+    }
+  }
+}
+
 function buildLaunchRequestBody(defaultSelector, options) {
   const launchOptions = options && typeof options === 'object' ? options : {};
   const body = {};
@@ -225,6 +505,8 @@ function buildLaunchRequestBody(defaultSelector, options) {
     'tags',
     'groupId',
     'matchMode',
+    'proxyId',
+    'proxyConfig',
     'launchArgs',
     'startUrls',
     'skipDefaultStartUrls',
@@ -358,7 +640,9 @@ async function runScriptTask(payload, chromium) {
     return response.body;
   };
 
-  const connect = async (session = {}) => {
+  const connect = async (session = {}, options = {}) => {
+    const connectOptions =
+      options && typeof options === 'object' && !Array.isArray(options) ? options : {};
     const endpoints = buildConnectEndpoints(payload, session);
     if (endpoints.length === 0) {
       throw new Error(
@@ -368,7 +652,8 @@ async function runScriptTask(payload, chromium) {
       );
     }
 
-    const deadline = Date.now() + timeout;
+    const connectTimeout = normalizeTimeout(connectOptions.timeoutMs, timeout);
+    const deadline = Date.now() + connectTimeout;
     let lastError = null;
 
     while (Date.now() <= deadline) {
@@ -380,7 +665,7 @@ async function runScriptTask(payload, chromium) {
 
         try {
           const browser = await chromium.connectOverCDP(endpoint, {
-            timeout: Math.max(1000, Math.min(remaining, timeout)),
+            timeout: Math.max(1000, Math.min(remaining, connectTimeout)),
           });
           connectedBrowsers.add(browser);
           const context = browser.contexts()[0] || null;
@@ -409,14 +694,230 @@ async function runScriptTask(payload, chromium) {
     const lastMessage =
       lastError && lastError.message ? lastError.message : String(lastError || 'unknown error');
     throw new Error(
-      `cdp endpoint is not ready after ${timeout} ms (endpoints: ${endpoints.join(', ')}): ${lastMessage}`
+      `cdp endpoint is not ready after ${connectTimeout} ms (endpoints: ${endpoints.join(', ')}): ${lastMessage}`
     );
+  };
+
+  const resolveConnectionContext = async (connection) => {
+    const browser = connection && connection.browser ? connection.browser : null;
+    if (!browser) {
+      throw new Error('browser connection is unavailable');
+    }
+
+    const context =
+      connection.context ||
+      browser.contexts()[0] ||
+      (typeof browser.newContext === 'function' ? await browser.newContext() : null);
+    if (!context) {
+      throw new Error('browser context is unavailable');
+    }
+
+    return {
+      browser,
+      context,
+    };
+  };
+
+  const grantPermissions = async (target, options = {}) => {
+    const permissionOptions =
+      options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+    const permissions = normalizePermissionList(permissionOptions.permissions);
+    const origin = normalizeOrigin(permissionOptions.origin);
+
+    let context = null;
+    if (target && typeof target.grantPermissions === 'function') {
+      context = target;
+    } else if (target && typeof target === 'object') {
+      context = target.context || null;
+      if (!context && target.browser) {
+        const resolved = await resolveConnectionContext(target);
+        context = resolved.context;
+      }
+    }
+
+    if (!context) {
+      return {
+        applied: false,
+        permissions,
+        origin,
+        reason: 'browser context is unavailable',
+      };
+    }
+    if (!origin) {
+      return {
+        applied: false,
+        permissions,
+        origin: '',
+        reason: 'origin is required',
+      };
+    }
+    if (permissions.length === 0) {
+      return {
+        applied: false,
+        permissions,
+        origin,
+        reason: 'permissions are required',
+      };
+    }
+    if (typeof context.grantPermissions !== 'function') {
+      return {
+        applied: false,
+        permissions,
+        origin,
+        reason: 'grantPermissions is unavailable',
+      };
+    }
+
+    try {
+      await context.grantPermissions(permissions, { origin });
+      return {
+        applied: true,
+        permissions,
+        origin,
+        strategy: 'grantPermissions',
+      };
+    } catch (error) {
+      return {
+        applied: false,
+        permissions,
+        origin,
+        reason: error && error.message ? error.message : String(error),
+      };
+    }
+  };
+
+  const openPage = async (connection, options = {}) => {
+    const openOptions =
+      options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+    const { browser, context } = await resolveConnectionContext(connection);
+    const shouldReuseCurrentPage = openOptions.reuseCurrentPage === true;
+
+    let page = null;
+    if (
+      shouldReuseCurrentPage &&
+      connection &&
+      connection.page &&
+      typeof connection.page.isClosed === 'function' &&
+      !connection.page.isClosed()
+    ) {
+      page = connection.page;
+    }
+    if (!page) {
+      page = await context.newPage();
+    }
+
+    if (typeof page.bringToFront === 'function' && openOptions.bringToFront !== false) {
+      await page.bringToFront().catch(() => {});
+    }
+
+    const permissionResult =
+      openOptions.permissions !== undefined
+        ? await grantPermissions(context, {
+            origin:
+              typeof openOptions.permissionOrigin === 'string' && openOptions.permissionOrigin.trim()
+                ? openOptions.permissionOrigin
+                : openOptions.url,
+            permissions: openOptions.permissions,
+          })
+        : {
+            applied: false,
+            permissions: [],
+            origin: '',
+            reason: '',
+          };
+
+    const targetURL = String(openOptions.url || '').trim();
+    if (targetURL) {
+      const waitUntil = ALLOWED_WAIT_UNTIL.has(String(openOptions.waitUntil || '').trim())
+        ? String(openOptions.waitUntil).trim()
+        : 'domcontentloaded';
+      await page.goto(targetURL, {
+        waitUntil,
+        timeout: normalizeTimeout(openOptions.timeoutMs, timeout),
+      });
+    }
+
+    return {
+      browser,
+      context,
+      page,
+      permissionResult,
+      reusedPage: page === (connection && connection.page ? connection.page : null),
+    };
+  };
+
+  const resolvePageTarget = (target) => {
+    if (target && typeof target.evaluate === 'function') {
+      return target;
+    }
+    if (target && target.page && typeof target.page.evaluate === 'function') {
+      return target.page;
+    }
+    throw new Error('page api target must be a Playwright page or an object containing page');
+  };
+
+  const callPageAPI = async (target, urlOrRequest, options = {}) => {
+    const page = resolvePageTarget(target);
+    const request = normalizePageAPIRequest(urlOrRequest, options);
+    const response = await page.evaluate(executePageAPIRequest, request);
+
+    if (request.throwOnError && (!response || response.ok !== true)) {
+      const status = response && response.status ? response.status : 0;
+      const message =
+        (response && typeof response.error === 'string' && response.error.trim()) ||
+        (status ? `page api returned http ${status}` : 'page api request failed');
+      throw new Error(message);
+    }
+
+    return response;
+  };
+
+  const browserFetch = callPageAPI;
+  const pageAPI = callPageAPI;
+
+  const useBrowser = async (options = {}) => {
+    const runOptions = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+    const launchOptions =
+      runOptions.launch && typeof runOptions.launch === 'object' && !Array.isArray(runOptions.launch)
+        ? runOptions.launch
+        : runOptions;
+    const connectOptions =
+      runOptions.connect && typeof runOptions.connect === 'object' && !Array.isArray(runOptions.connect)
+        ? runOptions.connect
+        : {};
+    const openOptions =
+      runOptions.open && typeof runOptions.open === 'object' && !Array.isArray(runOptions.open)
+        ? runOptions.open
+        : {
+            url: runOptions.url,
+            waitUntil: runOptions.waitUntil,
+            timeoutMs: runOptions.timeoutMs,
+            permissions: runOptions.permissions,
+            permissionOrigin: runOptions.permissionOrigin,
+            reuseCurrentPage: runOptions.reuseCurrentPage,
+            bringToFront: runOptions.bringToFront,
+          };
+
+    const session = await launch(launchOptions);
+    const connection = await connect(session, connectOptions);
+    const opened = await openPage(connection, openOptions);
+    return {
+      session,
+      connection,
+      ...opened,
+    };
   };
 
   const api = {
     chromium,
     launch,
     connect,
+    grantPermissions,
+    openPage,
+    useBrowser,
+    callPageAPI,
+    pageAPI,
+    browserFetch,
     selector,
     params,
     log,
