@@ -128,7 +128,7 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, coreInput CoreInpu
 		Transport: transport,
 	}
 
-	tempFile, err := os.CreateTemp(parentDir, "download_*.zip")
+	tempFile, err := os.CreateTemp(parentDir, coreArchiveTempPattern(targetUrl))
 	if err != nil {
 		sendEvent("error", 0, "创建临时文件失败: "+err.Error())
 		return
@@ -164,7 +164,7 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, coreInput CoreInpu
 	}()
 
 	// 3. 执行解压，并剥离顶层文件夹
-	if err := extractZipAndStripRoot(tempFilePath, tempExtractDir, func(p int, msg string) {
+	if err := extractCoreArchiveAndStripRoot(tempFilePath, tempExtractDir, func(p int, msg string) {
 		sendEvent("extracting", p, msg)
 	}); err != nil {
 		sendEvent("error", 0, "解压失败: "+err.Error())
@@ -172,7 +172,7 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, coreInput CoreInpu
 	}
 
 	if !m.ValidateCorePath(tempExtractDir).Valid {
-		sendEvent("error", 0, fmt.Sprintf("解压后未找到浏览器可执行文件（候选：%s），请检查压缩包内容！", strings.Join(CoreExecutableCandidates(), ", ")))
+		sendEvent("error", 0, fmt.Sprintf("解压后未找到当前平台可用的浏览器可执行文件（当前平台 %s，候选：%s），请检查压缩包内容！", CoreExecutablePlatform(), strings.Join(CoreExecutableCandidates(), ", ")))
 		return
 	}
 

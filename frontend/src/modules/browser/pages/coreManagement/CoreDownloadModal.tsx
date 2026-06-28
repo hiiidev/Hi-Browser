@@ -69,11 +69,11 @@ export function CoreDownloadModal({
           </div>
         )}
 
-        <FormItem label="下载地址 (ZIP)" required>
+        <FormItem label="下载地址" required>
           <Input
             value={form.url}
             onChange={e => setForm(prev => ({ ...prev, url: e.target.value }))}
-            placeholder="https://github.com/.../release.zip"
+            placeholder="https://github.com/.../chrome-linux.tar.xz"
             disabled={progress !== null}
           />
           <div className="text-xs text-[var(--color-text-muted)] mt-2 flex items-center justify-between bg-[var(--color-bg-muted)] p-2 rounded">

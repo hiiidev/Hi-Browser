@@ -5,6 +5,7 @@ import (
 	"ant-chrome/backend/internal/config"
 	"ant-chrome/backend/internal/logger"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -86,8 +87,106 @@ func (a *App) BrowserCoreScan() []BrowserCore {
 	return a.browserMgr.ListCores()
 }
 
-// BrowserCoreImportLocal 选择一个已解压内核目录并直接注册，不下载、不复制文件。
+// BrowserCoreImportLocal 选择一个已解压内核目录或归档文件并注册。
 func (a *App) BrowserCoreImportLocal() (*BrowserCore, error) {
+	if a.ctx == nil {
+		return nil, fmt.Errorf("app context is nil")
+	}
+	if a.browserMgr == nil {
+		return nil, fmt.Errorf("browser manager is nil")
+	}
+
+	selectedPath, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "选择 Chrome 内核归档文件",
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "Chrome 内核归档 (" + browser.SupportedCoreArchiveDescription() + ")", Pattern: browser.SupportedCoreArchivePattern()},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	selectedPath = strings.TrimSpace(selectedPath)
+	if selectedPath == "" {
+		return nil, nil
+	}
+
+	absPath, err := filepath.Abs(selectedPath)
+	if err != nil {
+		return nil, err
+	}
+	return a.importLocalBrowserCoreArchive(absPath)
+}
+
+func (a *App) importLocalBrowserCoreArchive(archivePath string) (*BrowserCore, error) {
+	archiveName := strings.TrimSpace(filepath.Base(archivePath))
+	coreName := strings.TrimSpace(coreNameFromArchiveName(archiveName))
+	if coreName == "" {
+		coreName = "本地内核"
+	}
+
+	targetCorePath := filepath.Join("chrome", coreName)
+	targetDir := a.browserMgr.ResolveRelativePath(targetCorePath)
+	if _, err := os.Stat(targetDir); err == nil {
+		return nil, fmt.Errorf("同名内核目录已存在：%s", targetCorePath)
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	parentDir := filepath.Dir(targetDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return nil, err
+	}
+	tempExtractDir, err := os.MkdirTemp(parentDir, coreName+"_import_*")
+	if err != nil {
+		return nil, err
+	}
+	cleanupTempExtract := true
+	defer func() {
+		if cleanupTempExtract {
+			_ = os.RemoveAll(tempExtractDir)
+		}
+	}()
+
+	if err := browser.ExtractCoreArchiveAndStripRootForImport(archivePath, tempExtractDir); err != nil {
+		return nil, fmt.Errorf("解压失败: %w", err)
+	}
+	if _, _, ok := browser.FindCoreExecutable(tempExtractDir); !ok {
+		return nil, fmt.Errorf("所选归档不是当前平台可用的内核包：当前平台 %s，未找到浏览器可执行文件（候选：%s）", browser.CoreExecutablePlatform(), strings.Join(browser.CoreExecutableCandidates(), ", "))
+	}
+	if err := os.Rename(tempExtractDir, targetDir); err != nil {
+		return nil, err
+	}
+	cleanupTempExtract = false
+
+	input := browser.CoreInput{
+		CoreName:  coreName,
+		CorePath:  targetCorePath,
+		IsDefault: len(a.browserMgr.ListCores()) == 0,
+	}
+	if err := a.browserMgr.SaveCore(input); err != nil {
+		return nil, err
+	}
+	for _, saved := range a.browserMgr.ListCores() {
+		if normalizeCorePathForCompare(saved.CorePath) == normalizeCorePathForCompare(targetCorePath) {
+			return &saved, nil
+		}
+	}
+	return nil, fmt.Errorf("本地内核已保存但未能读取结果")
+}
+
+func coreNameFromArchiveName(name string) string {
+	name = strings.TrimSpace(name)
+	for _, suffix := range []string{".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".txz", ".tbz2", ".zip", ".tar"} {
+		if strings.HasSuffix(strings.ToLower(name), suffix) {
+			return strings.TrimSpace(name[:len(name)-len(suffix)])
+		}
+	}
+	return strings.TrimSuffix(name, filepath.Ext(name))
+}
+
+// BrowserCoreImportLocalDirectory 选择一个已解压内核目录并直接注册，不下载、不复制文件。
+func (a *App) BrowserCoreImportLocalDirectory() (*BrowserCore, error) {
 	if a.ctx == nil {
 		return nil, fmt.Errorf("app context is nil")
 	}
@@ -111,7 +210,7 @@ func (a *App) BrowserCoreImportLocal() (*BrowserCore, error) {
 		return nil, err
 	}
 	if _, _, ok := browser.FindCoreExecutable(absDir); !ok {
-		return nil, fmt.Errorf("所选目录不是有效内核目录：未找到浏览器可执行文件（候选：%s）", strings.Join(browser.CoreExecutableCandidates(), ", "))
+		return nil, fmt.Errorf("所选目录不是当前平台可用的内核目录：当前平台 %s，未找到浏览器可执行文件（候选：%s）", browser.CoreExecutablePlatform(), strings.Join(browser.CoreExecutableCandidates(), ", "))
 	}
 
 	corePath := a.relativeCorePathIfPossible(absDir)

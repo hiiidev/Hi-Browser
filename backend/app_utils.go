@@ -186,7 +186,7 @@ func (a *App) scanChromeDir(chromeRoot string) []browser.Core {
 	}
 
 	// 如果根目录本身就有浏览器可执行文件，视为单内核结构
-	if _, _, ok := browser.FindCoreExecutable(baseDir); ok {
+	if _, _, ok := browser.FindCoreExecutableShallow(baseDir); ok {
 		return []browser.Core{
 			{
 				CoreId:    "default",
