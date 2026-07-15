@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-15T12:54:10Z",
+  "provider": "fingerprint-chromium-static",
+  "sourceRepository": "adryfish/fingerprint-chromium",
+  "releases": [
+    {
+      "id": 342454681,
+      "tagName": "148.0.7778.215",
+      "name": "148.0.7778.215",
+      "body": "Update to Chromium 148.0.7778.215\r\n\r\nThis release is for all platforms\r\n\r\nNew Features in Chrome 148\r\n\r\n1. Randomized Device Memory Fingerprint\r\n   navigator.deviceMemory is no longer fixed at 8. It is now randomly chosen\r\n   from 8, 16, or 32 based on the --fingerprint seed.\r\n\r\n2. Realistic GPU Parameter Simulation\r\n   GPU fingerprinting now simulates WebGL/GPU parameters using real GPU\r\n   parameter sets, making the reported GPU more consistent with real hardware.\r\n   GPU spoofing can still be disabled with --disable-spoofing=gpu.",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/148.0.7778.215",
+      "publishedAt": "2026-06-21T04:34:00Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 453463088,
+          "name": "ungoogled-chromium-148.0.7778.215-1-x86_64_linux.tar.xz",
+          "size": 141269020,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/148.0.7778.215/ungoogled-chromium-148.0.7778.215-1-x86_64_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        },
+        {
+          "id": 453463479,
+          "name": "ungoogled-chromium_148.0.7778.215-1.1_macos.dmg",
+          "size": 140187500,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/148.0.7778.215/ungoogled-chromium_148.0.7778.215-1.1_macos.dmg",
+          "contentType": "application/x-apple-diskimage",
+          "publisherSha256": ""
+        },
+        {
+          "id": 453463736,
+          "name": "ungoogled-chromium_148.0.7778.215-1.1_windows_x64.zip",
+          "size": 189767686,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/148.0.7778.215/ungoogled-chromium_148.0.7778.215-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 291271968,
+      "tagName": "144.0.7559.132",
+      "name": "144.0.7559.132",
+      "body": "Update to Chromium 144.0.7559.132\r\n\r\nThis release is for all platforms\r\n\r\n### **New Features in Chrome 144**\r\n\r\n  1. New --disable-spoofing Parameter                                                                                                                              \r\n\r\n  A new unified parameter to selectively disable specific fingerprint spoofing. Use comma-separated values to specify which spoofing to disable.                   \r\n                                                                                                                                                                   \r\n  - Available values: font, audio, canvas, clientrects, gpu                                                                                                        \r\n  - Example: --disable-spoofing=font,gpu disables font and GPU fingerprint spoofing.\r\n  - This replaces the previous --disable-gpu-fingerprint parameter with a more flexible, granular approach.\r\n\r\n  2. Removed Legacy GPU Fingerprint Parameters\r\n\r\n  The following parameters have been removed in Chrome 144:\r\n\r\n  - --fingerprint-gpu-vendor — Previously used to customize GPU vendor string\r\n  - --fingerprint-gpu-renderer — Previously used to customize GPU renderer string\r\n  - --disable-gpu-fingerprint — Previously used to disable GPU fingerprint\r\n\r\n  Migration: If you were using --disable-gpu-fingerprint, replace it with --disable-spoofing=gpu. If you were using --fingerprint-gpu-vendor or\r\n  --fingerprint-gpu-renderer, simply remove them — GPU fingerprint is now automatically generated from the fingerprint seed when not disabled.",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/144.0.7559.132",
+      "publishedAt": "2026-02-27T09:02:24Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 363377782,
+          "name": "ungoogled-chromium-144.0.7559.132-1-x86_64_linux.tar.xz",
+          "size": 133493680,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/144.0.7559.132/ungoogled-chromium-144.0.7559.132-1-x86_64_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        },
+        {
+          "id": 363378390,
+          "name": "ungoogled-chromium_144.0.7559.132-1.1_windows_x64.zip",
+          "size": 176796270,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/144.0.7559.132/ungoogled-chromium_144.0.7559.132-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 272370195,
+      "tagName": "142.0.7444.175",
+      "name": "142.0.7444.175",
+      "body": "Update to Chromium 142.0.7444.175\r\n\r\nThis release is for all platforms\r\n\r\n### **New Features in Chrome 142**\r\n\r\n1. **Updated UserAgent and UserAgentData Fingerprint Implementation**\r\n   - Improved fingerprint implementation for `navigator.userAgent` and `navigator.userAgentData`.\r\n\r\n2. **Updated Audio Fingerprint Implementation**\r\n   - Enhanced audio fingerprint modification. You can verify the effect at https://pixelscan.net/fingerprint-check\r\n\r\n3. **Updated Canvas Fingerprint Implementation**\r\n   - Improved Canvas fingerprint modification for better anti-detection.\r\n\r\n4. **GPU Fingerprint Disable Option**\r\n   - GPU fingerprint may have issues in some scenarios. Use `--disable-gpu-fingerprint` parameter to disable GPU fingerprint if needed.\r\n",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/142.0.7444.175",
+      "publishedAt": "2025-12-23T03:45:43Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 332002901,
+          "name": "ungoogled-chromium-142.0.7444.175-1-x86_64_linux.tar.xz",
+          "size": 132048760,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/142.0.7444.175/ungoogled-chromium-142.0.7444.175-1-x86_64_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        },
+        {
+          "id": 332797766,
+          "name": "ungoogled-chromium_142.0.7444.175-1.1_macos.dmg",
+          "size": 130929159,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/142.0.7444.175/ungoogled-chromium_142.0.7444.175-1.1_macos.dmg",
+          "contentType": "application/x-apple-diskimage",
+          "publisherSha256": ""
+        },
+        {
+          "id": 332003074,
+          "name": "ungoogled-chromium_142.0.7444.175-1.1_windows_x64.zip",
+          "size": 410369977,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/142.0.7444.175/ungoogled-chromium_142.0.7444.175-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 247069210,
+      "tagName": "139.0.7258.154",
+      "name": "139.0.7258.154",
+      "body": "Update to Chromium 139.0.7258.154\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/139.0.7258.154",
+      "publishedAt": "2025-09-14T09:20:22Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 293070251,
+          "name": "ungoogled-chromium-139.0.7258.154-1-x86_64_linux.tar.xz",
+          "size": 131364556,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/139.0.7258.154/ungoogled-chromium-139.0.7258.154-1-x86_64_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        },
+        {
+          "id": 293108632,
+          "name": "ungoogled-chromium_139.0.7258.154-1.1_macos.dmg",
+          "size": 129973813,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/139.0.7258.154/ungoogled-chromium_139.0.7258.154-1.1_macos.dmg",
+          "contentType": "application/x-apple-diskimage",
+          "publisherSha256": ""
+        },
+        {
+          "id": 293070943,
+          "name": "ungoogled-chromium_139.0.7258.154-1.1_windows_x64.zip",
+          "size": 403763462,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/139.0.7258.154/ungoogled-chromium_139.0.7258.154-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 238899598,
+      "tagName": "138.0.7204.183",
+      "name": "138.0.7204.183",
+      "body": "Update to Chromium 138.0.7204.183\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/138.0.7204.183",
+      "publishedAt": "2025-08-11T04:46:42Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 281323672,
+          "name": "ungoogled-chromium-138.0.7204.183-1_linux.tar.xz",
+          "size": 32,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/138.0.7204.183/ungoogled-chromium-138.0.7204.183-1_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        },
+        {
+          "id": 281323809,
+          "name": "ungoogled-chromium_138.0.7204.183-1.1_windows_x64.zip",
+          "size": 400935413,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/138.0.7204.183/ungoogled-chromium_138.0.7204.183-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 222260117,
+      "tagName": "136.0.7103.113",
+      "name": "136.0.7103.113",
+      "body": "Update to Chromium 136.0.7103.113\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/136.0.7103.113",
+      "publishedAt": "2025-06-01T04:47:55Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 262313296,
+          "name": "ungoogled-chromium_136.0.7103.113-1.1_macos.dmg",
+          "size": 126173095,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_macos.dmg",
+          "contentType": "application/x-apple-diskimage",
+          "publisherSha256": ""
+        },
+        {
+          "id": 262313369,
+          "name": "ungoogled-chromium_136.0.7103.113-1.1_windows_x64.zip",
+          "size": 395128530,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        },
+        {
+          "id": 262313529,
+          "name": "ungoogled-chromium_136.0.7103.113-1_linux.tar.xz",
+          "size": 132023928,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/136.0.7103.113/ungoogled-chromium_136.0.7103.113-1_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 217822587,
+      "tagName": "135.0.7049.95",
+      "name": "135.0.7049.95",
+      "body": "Update to Chromium 135.0.7049.95\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/135.0.7049.95",
+      "publishedAt": "2025-05-11T07:36:14Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 253633085,
+          "name": "ungoogled-chromium_135.0.7049.95-1.1_macos.dmg",
+          "size": 125111910,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1.1_macos.dmg",
+          "contentType": "application/x-apple-diskimage",
+          "publisherSha256": ""
+        },
+        {
+          "id": 253633134,
+          "name": "ungoogled-chromium_135.0.7049.95-1.1_windows_x64.zip",
+          "size": 391511588,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        },
+        {
+          "id": 253633225,
+          "name": "ungoogled-chromium_135.0.7049.95-1_linux.tar.xz",
+          "size": 130230216,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/135.0.7049.95/ungoogled-chromium_135.0.7049.95-1_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 215425623,
+      "tagName": "134.0.6998.165",
+      "name": "134.0.6998.165",
+      "body": "Update to Chromium 134.0.6998.165\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/134.0.6998.165",
+      "publishedAt": "2025-04-29T09:56:13Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 250378265,
+          "name": "ungoogled-chromium_134.0.6998.165-1.1_windows_x64.zip",
+          "size": 388984370,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/134.0.6998.165/ungoogled-chromium_134.0.6998.165-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        },
+        {
+          "id": 250868864,
+          "name": "ungoogled-chromium_134.0.6998.165-1_linux.tar.xz",
+          "size": 129858564,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/134.0.6998.165/ungoogled-chromium_134.0.6998.165-1_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 213290100,
+      "tagName": "133.0.6943.126",
+      "name": "133.0.6943.126",
+      "body": "Update to Chromium 133.0.6943.126\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/133.0.6943.126",
+      "publishedAt": "2025-04-18T09:04:33Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 247450102,
+          "name": "ungoogled-chromium_133.0.6943.126-1.1_windows_x64.zip",
+          "size": 388934271,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/133.0.6943.126/ungoogled-chromium_133.0.6943.126-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        },
+        {
+          "id": 247450345,
+          "name": "ungoogled-chromium_133.0.6943.126-1_linux.tar.xz",
+          "size": 130276784,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/133.0.6943.126/ungoogled-chromium_133.0.6943.126-1_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        }
+      ]
+    },
+    {
+      "id": 201346920,
+      "tagName": "132.0.6834.159",
+      "name": "132.0.6834.159",
+      "body": "Update to Chromium 132.0.6834.159\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/132.0.6834.159",
+      "publishedAt": "2025-02-20T06:42:42Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 231781713,
+          "name": "ungoogled-chromium_132.0.6834.110-1.1_macos.dmg",
+          "size": 123261209,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/132.0.6834.159/ungoogled-chromium_132.0.6834.110-1.1_macos.dmg",
+          "contentType": "application/x-apple-diskimage",
+          "publisherSha256": ""
+        },
+        {
+          "id": 231565001,
+          "name": "ungoogled-chromium_132.0.6834.159-1.1_windows_x64.zip",
+          "size": 384277805,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/132.0.6834.159/ungoogled-chromium_132.0.6834.159-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        },
+        {
+          "id": 230878493,
+          "name": "ungoogled-chromium_132.0.6834.159-1_linux.tar.xz",
+          "size": 128724600,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/132.0.6834.159/ungoogled-chromium_132.0.6834.159-1_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        }
+      ]
+    }
+  ]
+}
