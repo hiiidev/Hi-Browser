@@ -332,7 +332,7 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, cor
 	}()
 
 	// 3. 执行解压，并剥离顶层文件夹
-	if err := extractCoreArchiveAndStripRoot(tempFilePath, tempExtractDir, func(p int, msg string) {
+	if err := extractCoreArchiveAndStripRootContext(ctx, tempFilePath, tempExtractDir, func(p int, msg string) {
 		sendEvent("extracting", p, msg)
 	}); err != nil {
 		sendEvent("error", 0, "解压失败: "+err.Error())

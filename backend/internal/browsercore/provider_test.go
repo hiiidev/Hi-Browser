@@ -47,6 +47,16 @@ func TestSelectCompatibleAssetTie(t *testing.T) {
 	}
 }
 
+func TestSelectCompatibleAssetGenericMacDMG(t *testing.T) {
+	asset, err := SelectCompatibleAsset(testRelease("ungoogled-chromium_148.0.7778.215-1.1_macos.dmg"), "darwin", "arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(asset.Name, ".dmg") {
+		t.Fatalf("unexpected %s", asset.Name)
+	}
+}
+
 func TestGitHubProviderJSONAndETagCache(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -16,7 +16,7 @@ from pathlib import Path
 
 API_ROOT = "https://api.github.com"
 DEFAULT_REPOSITORY = "adryfish/fingerprint-chromium"
-SUPPORTED_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz")
+SUPPORTED_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".dmg")
 SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 
 

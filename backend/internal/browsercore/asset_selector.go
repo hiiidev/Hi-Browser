@@ -23,6 +23,9 @@ func SelectCompatibleAsset(release Release, goos, goarch string) (Asset, error) 
 		}
 		osScore := tokenScore(name, wantedOS)
 		archScore := tokenScore(name, wantedArch)
+		if archScore == 0 && goos == "darwin" && strings.HasSuffix(name, ".dmg") && !containsKnownArchitecture(name) {
+			archScore = 1
+		}
 		if osScore == 0 || archScore == 0 {
 			continue
 		}
@@ -46,7 +49,7 @@ func excludedAsset(name string) bool {
 }
 
 func supportedArchive(name string) bool {
-	for _, suffix := range []string{".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz"} {
+	for _, suffix := range []string{".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".dmg"} {
 		if strings.HasSuffix(name, suffix) {
 			return true
 		}
@@ -62,9 +65,21 @@ func archivePreference(name string) int {
 		return 5
 	case strings.HasSuffix(name, ".tar.xz"), strings.HasSuffix(name, ".txz"):
 		return 4
+	case strings.HasSuffix(name, ".dmg"):
+		return 3
 	default:
 		return 0
 	}
+}
+
+func containsKnownArchitecture(name string) bool {
+	lower := strings.ToLower(name)
+	for _, token := range []string{"amd64", "x86_64", "x64", "arm64", "aarch64"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func assetOSTokens(goos string) []string {

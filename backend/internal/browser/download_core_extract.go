@@ -5,11 +5,15 @@ import (
 	"archive/zip"
 	"compress/bzip2"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ulikunitz/xz"
 )
@@ -29,11 +33,11 @@ const (
 )
 
 func SupportedCoreArchivePattern() string {
-	return "*.zip;*.tar;*.tar.gz;*.tgz;*.tar.xz;*.txz;*.tar.bz2;*.tbz2"
+	return "*.zip;*.tar;*.tar.gz;*.tgz;*.tar.xz;*.txz;*.tar.bz2;*.tbz2;*.dmg"
 }
 
 func SupportedCoreArchiveDescription() string {
-	return "支持 ZIP、TAR、TAR.GZ、TAR.XZ、TAR.BZ2"
+	return "支持 ZIP、TAR、TAR.GZ、TAR.XZ、TAR.BZ2，以及 macOS DMG"
 }
 
 func coreArchiveTempPattern(rawURL string) string {
@@ -56,7 +60,14 @@ func filepathFromURLPath(raw string) (string, error) {
 }
 
 func extractCoreArchiveAndStripRoot(archivePath, dest string, progressCb func(int, string)) error {
+	return extractCoreArchiveAndStripRootContext(context.Background(), archivePath, dest, progressCb)
+}
+
+func extractCoreArchiveAndStripRootContext(ctx context.Context, archivePath, dest string, progressCb func(int, string)) error {
 	lower := strings.TrimSuffix(strings.ToLower(archivePath), ".part")
+	if strings.HasSuffix(lower, ".dmg") {
+		return extractDMGArchive(ctx, archivePath, dest, progressCb)
+	}
 	if strings.HasSuffix(lower, ".zip") {
 		return extractZipArchiveAndStripRoot(archivePath, dest, progressCb)
 	}
@@ -245,7 +256,7 @@ func tarStreamReader(archivePath string, file *os.File) (io.Reader, func(), erro
 
 func isTarArchivePath(path string) bool {
 	for _, suffix := range coreArchiveSuffixes() {
-		if suffix == ".zip" {
+		if suffix == ".zip" || suffix == ".dmg" {
 			continue
 		}
 		if strings.HasSuffix(path, suffix) {
@@ -256,7 +267,97 @@ func isTarArchivePath(path string) bool {
 }
 
 func coreArchiveSuffixes() []string {
-	return []string{".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".txz", ".tbz2", ".zip", ".tar"}
+	return []string{".tar.gz", ".tar.xz", ".tar.bz2", ".tgz", ".txz", ".tbz2", ".zip", ".tar", ".dmg"}
+}
+
+func extractDMGArchive(ctx context.Context, archivePath, dest string, progressCb func(int, string)) error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("DMG 内核只能在 macOS 上安装")
+	}
+	mountPoint := dest + ".dmg-mount"
+	_ = os.RemoveAll(mountPoint)
+	if err := os.MkdirAll(mountPoint, 0700); err != nil {
+		return err
+	}
+	defer os.RemoveAll(mountPoint)
+	progressCb(5, "正在以只读方式挂载 DMG...")
+	attach := exec.CommandContext(ctx, "hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint", mountPoint, archivePath)
+	if output, err := attach.CombinedOutput(); err != nil {
+		return fmt.Errorf("挂载 DMG 失败: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	detach := func() {
+		detachCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_ = exec.CommandContext(detachCtx, "hdiutil", "detach", mountPoint, "-force").Run()
+	}
+	defer detach()
+	entries, err := os.ReadDir(mountPoint)
+	if err != nil {
+		return err
+	}
+	var appPath string
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".app") {
+			if appPath != "" {
+				return fmt.Errorf("DMG 中存在多个 .app，无法确定浏览器内核")
+			}
+			appPath = filepath.Join(mountPoint, entry.Name())
+		}
+	}
+	if appPath == "" {
+		return fmt.Errorf("DMG 中未找到浏览器 .app")
+	}
+	if err := validateDMGAppBundle(appPath); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return err
+	}
+	target := filepath.Join(dest, filepath.Base(appPath))
+	progressCb(30, "正在从 DMG 复制浏览器应用...")
+	copyCommand := exec.CommandContext(ctx, "ditto", appPath, target)
+	if output, err := copyCommand.CombinedOutput(); err != nil {
+		return fmt.Errorf("复制 DMG 内核失败: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	progressCb(100, "DMG 解压完成")
+	return nil
+}
+
+func validateDMGAppBundle(root string) error {
+	rootClean := filepath.Clean(root)
+	count := 0
+	var total int64
+	return filepath.WalkDir(rootClean, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		count++
+		if count > maxCoreArchiveFiles {
+			return fmt.Errorf("DMG 文件数量超过安全限制 %d", maxCoreArchiveFiles)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return fmt.Errorf("DMG 符号链接无效 %s: %w", path, err)
+			}
+			target = filepath.Clean(target)
+			if target != rootClean && !strings.HasPrefix(target, rootClean+string(os.PathSeparator)) {
+				return fmt.Errorf("DMG 符号链接指向应用目录之外: %s", path)
+			}
+			return nil
+		}
+		if info.Mode().IsRegular() {
+			if info.Size() < 0 || info.Size() > maxCoreExtractedBytes-total {
+				return fmt.Errorf("DMG 内容总尺寸超过安全限制")
+			}
+			total += info.Size()
+		}
+		return nil
+	})
 }
 
 func detectCommonArchiveRoot(entries []archiveEntryMeta) (string, bool) {
