@@ -60,8 +60,8 @@ jobs:
       - name: Validate app bundle
         run: |
           set -euo pipefail
-          app_path="$(ls -1d publish/output/AntBrowser-*-macos-${{ matrix.arch }}.app | head -n 1)"
-          zip_path="$(ls -1 publish/output/AntBrowser-*-macos-${{ matrix.arch }}.zip | head -n 1)"
+          app_path="$(ls -1d publish/output/HiBrowser-*-macos-${{ matrix.arch }}.app | head -n 1)"
+          zip_path="$(ls -1 publish/output/HiBrowser-*-macos-${{ matrix.arch }}.zip | head -n 1)"
           echo "Validating: $app_path"
           test -x "$app_path/Contents/MacOS/ant-chrome"
           test -x "$app_path/Contents/MacOS/bin/xray"
@@ -75,6 +75,6 @@ jobs:
         with:
           name: ant-browser-macos-${{ matrix.arch }}
           path: |
-            publish/output/AntBrowser-*-macos-${{ matrix.arch }}.app
-            publish/output/AntBrowser-*-macos-${{ matrix.arch }}.zip
+            publish/output/HiBrowser-*-macos-${{ matrix.arch }}.app
+            publish/output/HiBrowser-*-macos-${{ matrix.arch }}.zip
           if-no-files-found: error

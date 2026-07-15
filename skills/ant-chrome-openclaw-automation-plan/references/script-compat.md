@@ -13,8 +13,8 @@
 
 正确做法是：
 
-- OpenClaw 调 Ant Browser 的脚本执行接口
-- Ant Browser 在本地执行脚本
+- OpenClaw 调 Hi Browser 的脚本执行接口
+- Hi Browser 在本地执行脚本
 - OpenClaw 只负责下达任务和接收结果
 
 ## 现在的真实执行链路
@@ -22,8 +22,8 @@
 当前链路已经存在：
 
 1. OpenClaw 或前端发起“执行脚本”
-2. Ant Browser 读取 `scriptId`
-3. Ant Browser 调 `AutomationScriptRunWithOptions`
+2. Hi Browser 读取 `scriptId`
+3. Hi Browser 调 `AutomationScriptRunWithOptions`
 4. 再进入 `RunScriptTask`
 5. 本地 runner 执行脚本
 6. runner 内部自己调用 LaunchServer
@@ -54,13 +54,13 @@
 - artifact 输出目录
 - 运行结果记录
 
-这些都已经在 Ant Browser 后端里了。
+这些都已经在 Hi Browser 后端里了。
 
 如果让 OpenClaw 直接跑：
 
 - 会重复实现一套 runtime
 - 会重复处理 LaunchServer 细节
-- 会把脚本和 Ant Browser 当前能力拆开
+- 会把脚本和 Hi Browser 当前能力拆开
 - 后面维护会很乱
 
 ## 最合理的兼容方式
@@ -69,7 +69,7 @@
 
 这样做的好处是：
 
-- Ant Browser 继续只提供通用执行入口
+- Hi Browser 继续只提供通用执行入口
 - OpenClaw 只是其中一个调用方
 - 后续如果还有别的 agent / orchestrator，要接也能直接复用
 
@@ -132,10 +132,10 @@ POST /api/automation/scripts/run
 - 不要求 OpenClaw 先手工“启动实例再执行”
 - 直接让脚本 runner 内部自己处理 `launch() + connect()`
 
-也就是把 LaunchServer + CDP + Playwright 的细节都收进 Ant Browser，不要让 OpenClaw 自己补：
+也就是把 LaunchServer + CDP + Playwright 的细节都收进 Hi Browser，不要让 OpenClaw 自己补：
 
 1. OpenClaw 只给 `scriptId + selector + params`
-2. Ant Browser 在本地运行 `playwright-cdp` 脚本
+2. Hi Browser 在本地运行 `playwright-cdp` 脚本
 3. runner 内部自己调用 LaunchServer 并重试接管 CDP
 
 这样 OpenClaw 就只管一句话：
@@ -204,14 +204,14 @@ OpenClaw 转成：
 }
 ```
 
-然后 POST 给 Ant Browser。
+然后 POST 给 Hi Browser。
 
 ## 最重要的一点
 
 OpenClaw 和脚本系统的关系，建议这样定：
 
 - OpenClaw = 编排层
-- Ant Browser 脚本系统 = 执行层
+- Hi Browser 脚本系统 = 执行层
 
 不要反过来。
 
@@ -230,7 +230,7 @@ POST /api/runtime/session
 - 等待 `debugReady=true`
 - 返回可接管的 `cdpUrl`
 
-如果 OpenClaw 想把 LaunchServer + Playwright + artifact 输出这些复杂度都交给 Ant Browser，本地直接执行现成脚本，优先走：
+如果 OpenClaw 想把 LaunchServer + Playwright + artifact 输出这些复杂度都交给 Hi Browser，本地直接执行现成脚本，优先走：
 
 ```text
 POST /api/automation/scripts/run

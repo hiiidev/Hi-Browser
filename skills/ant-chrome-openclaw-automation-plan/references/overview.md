@@ -9,7 +9,7 @@
 把职责拆开：
 
 - OpenClaw 负责对话、任务编排、页面理解
-- Ant Browser 负责实例选择、启动、停止、自动化执行
+- Hi Browser 负责实例选择、启动、停止、自动化执行
 
 核心目标不是“让 OpenClaw 深度耦合 ant-chrome 内部实现”，而是让 ant-chrome 暴露稳定、通用、可复用的公共入口。
 

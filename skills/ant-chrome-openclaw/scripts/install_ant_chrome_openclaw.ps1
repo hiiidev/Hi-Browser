@@ -196,7 +196,7 @@ function Show-Usage {
     Write-Host "  -TargetSkillsDir     OpenClaw skills directory"
     Write-Host "  -ConfigFile          OpenClaw config path (for example openclaw.json)"
     Write-Host "  -BrowserProfileName  Browser profile name to create or update (default: ant-chrome)"
-    Write-Host "  -BaseUrl             Ant Browser LaunchServer base URL"
+    Write-Host "  -BaseUrl             Hi Browser LaunchServer base URL"
     Write-Host "  -ApiHeader           API auth header name"
     Write-Host "  -ApiKey              API key written into the skill entry"
     Write-Host "  -Color               Browser profile color (default: #0F766E)"

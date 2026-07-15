@@ -98,7 +98,7 @@ jobs:
       - name: Validate tar package layout
         run: |
           set -euo pipefail
-          tar_file="$(ls -1 publish/output/AntBrowser-*-linux-${{ matrix.arch }}.tar.gz | head -n 1)"
+          tar_file="$(ls -1 publish/output/HiBrowser-*-linux-${{ matrix.arch }}.tar.gz | head -n 1)"
           validate_dir="$(mktemp -d)"
           echo "Validating: $tar_file"
           tar -xzf "$tar_file" -C "$validate_dir"

@@ -3,7 +3,7 @@ name: ant-chrome-openclaw-automation-plan
 description: Use when implementing, reviewing, auditing, or updating the ant-chrome and OpenClaw integration design, rollout status, or public HTTP API contract. Prefer this skill for low-coupling integration work around runtime/session, runtime/stop, automation/scripts, playwright-cdp execution, and OpenClaw compatibility mapping. Do not use it for day-to-day LaunchServer API invocation; use the sibling ant-chrome-openclaw skill instead.
 ---
 
-# Ant Browser OpenClaw Integration Plan
+# Hi Browser OpenClaw Integration Plan
 
 Use this skill for engineering work on the integration itself: planning, code changes, API alignment, audits, and rollout decisions.
 
@@ -18,7 +18,7 @@ If the task is operational usage of LaunchServer from OpenClaw, read the sibling
 
 ## Working Rules
 
-1. Keep OpenClaw as the orchestration layer and Ant Browser as the execution layer.
+1. Keep OpenClaw as the orchestration layer and Hi Browser as the execution layer.
 2. Prefer public/common APIs first:
    - `POST /api/runtime/session`
    - `POST /api/runtime/status`

@@ -73,7 +73,7 @@ export function Sidebar() {
             <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-[var(--color-accent)] flex items-center justify-center">
               <img
                 src={logoImage}
-                alt="应用Logo"
+                alt="Hi Browser Logo"
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   // 图片加载失败时显示首字母
@@ -93,7 +93,7 @@ export function Sidebar() {
           <div className="w-8 h-8 rounded-full overflow-hidden bg-[var(--color-accent)] flex items-center justify-center">
             <img
               src={logoImage}
-              alt="应用Logo"
+              alt="Hi Browser Logo"
               className="w-full h-full object-cover"
               onError={(e) => {
                 // 图片加载失败时显示首字母

@@ -259,7 +259,7 @@ Use launch logs before retrying if the endpoint is reachable but the previous re
 
 ## Automation script list
 
-Use this when the user wants to see what Ant Browser scripts already exist before choosing one to run.
+Use this when the user wants to see what Hi Browser scripts already exist before choosing one to run.
 
 ```bash
 curl_ant "$BASE_URL/api/automation/scripts"
@@ -354,7 +354,7 @@ Notes:
 - `selector` and `params` must be JSON objects when provided.
 - If `selector` is omitted, the API uses the script default selector unless `useScriptSelector=false`.
 - If `params` is omitted, the API uses the script default params unless `useScriptParams=false`.
-- For scripts already bound to a target in Ant Browser, prefer the minimal body and only override what the user explicitly asked to change.
+- For scripts already bound to a target in Hi Browser, prefer the minimal body and only override what the user explicitly asked to change.
 
 ## Automation script runs
 

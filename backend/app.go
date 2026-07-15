@@ -71,7 +71,7 @@ func (a *App) appName() string {
 			return name
 		}
 	}
-	return "Ant Browser"
+	return "Hi Browser"
 }
 
 func (a *App) appVersion() string {

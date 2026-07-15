@@ -44,7 +44,7 @@ bash skills/ant-chrome-openclaw/scripts/install_ant_chrome_openclaw.sh \
   --set-default-profile
 ```
 
-如果 Ant Browser 开了 API Key，安装时补上 `-ApiKey` 或 `--api-key`。
+如果 Hi Browser 开了 API Key，安装时补上 `-ApiKey` 或 `--api-key`。
 
 安装后重启 OpenClaw。
 
@@ -86,7 +86,7 @@ bash skills/ant-chrome-openclaw/scripts/install_ant_chrome_openclaw.sh \
 直接执行预置脚本 news-query-txt。
 ```
 
-如果脚本已经在 Ant Browser 里绑定了目标实例和默认参数，通常这两句就够了。
+如果脚本已经在 Hi Browser 里绑定了目标实例和默认参数，通常这两句就够了。
 
 只有下面这些情况，才继续补充：
 
@@ -138,9 +138,9 @@ bash skills/ant-chrome-openclaw/scripts/install_ant_chrome_openclaw.sh \
 
 ## 3. 注意事项
 
-- 先在 Ant Browser 前端里把实例配置好，再让 OpenClaw 接管
+- 先在 Hi Browser 前端里把实例配置好，再让 OpenClaw 接管
 - 提问时尽量写清楚实例名或 `launchCode`，优先用精确标识
 - 只有 `debugReady=true` 时才适合接管
 - 如果有多个匹配实例，不要让它自动选，先让它告诉你
 - `browser stop` 只是断开接管，不是关闭实例
-- 如果脚本已经在 Ant Browser 里绑定好了目标实例和默认参数，提示词尽量短，不要重复描述内部 API 流程
+- 如果脚本已经在 Hi Browser 里绑定好了目标实例和默认参数，提示词尽量短，不要重复描述内部 API 流程

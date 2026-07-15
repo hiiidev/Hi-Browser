@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the macOS packaging plan for Ant Browser.
+This document defines the macOS packaging plan for Hi Browser.
 
 The goal is to turn the current codebase into a macOS build that can:
 
@@ -60,9 +60,9 @@ The repository now includes the first macOS writable-state implementation for ap
 
 The current initial macOS packaging scaffold intentionally places helper binaries and seed files under:
 
-- `Ant Browser.app/Contents/MacOS/bin`
-- `Ant Browser.app/Contents/MacOS/config.yaml`
-- `Ant Browser.app/Contents/MacOS/chrome/README.md`
+- `Hi Browser.app/Contents/MacOS/bin`
+- `Hi Browser.app/Contents/MacOS/config.yaml`
+- `Hi Browser.app/Contents/MacOS/chrome/README.md`
 
 This is not the prettiest final bundle layout, but it matches the current runtime path resolution and avoids a larger refactor in Phase 1.
 
@@ -112,9 +112,9 @@ Why:
 
 Recommended structure inside the built app:
 
-- `Ant Browser.app/Contents/MacOS/ant-chrome`
-- `Ant Browser.app/Contents/Resources/bin/xray`
-- `Ant Browser.app/Contents/Resources/bin/sing-box`
+- `Hi Browser.app/Contents/MacOS/ant-chrome`
+- `Hi Browser.app/Contents/Resources/bin/xray`
+- `Hi Browser.app/Contents/Resources/bin/sing-box`
 - optional placeholder `chrome/README.md` if you want to keep behavior aligned with Linux
 
 ### User-Writable State

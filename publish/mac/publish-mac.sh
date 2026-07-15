@@ -126,10 +126,10 @@ APP_BIN_DIR="$ROOT_DIR/build/bin"
 CHROME_README_SRC="$ROOT_DIR/chrome/README.md"
 CONFIG_INIT_SRC="$ROOT_DIR/publish/config.init.mac.yaml"
 CORE_MANIFEST_SRC="$ROOT_DIR/browser-core-manifest.json"
-ZIP_NAME="AntBrowser-${VERSION}-macos-${ARCH}.zip"
-APP_EXPORT="$OUTPUT_DIR/AntBrowser-${VERSION}-macos-${ARCH}.app"
+ZIP_NAME="HiBrowser-${VERSION}-macos-${ARCH}.zip"
+APP_EXPORT="$OUTPUT_DIR/HiBrowser-${VERSION}-macos-${ARCH}.app"
 STAGE_DIR="$STAGING_ROOT/$TARGET"
-APP_STAGE="$STAGE_DIR/Ant Browser.app"
+APP_STAGE="$STAGE_DIR/Hi Browser.app"
 
 find_built_app_bundle() {
   python3 - "$APP_BIN_DIR" <<'PY'
@@ -170,7 +170,7 @@ PY
 }
 
 echo "========================================"
-echo "  Ant Browser macOS Publish"
+echo "  Hi Browser macOS Publish"
 echo "========================================"
 echo "Target : $TARGET"
 echo "Version: $VERSION"

@@ -4,18 +4,18 @@ This skill is meant for the current stable integration path:
 
 - `ant-chrome` owns browser profiles, proxy bindings, Chrome cores, and instance startup.
 - OpenClaw owns conversation flow and browser-tool attachment.
-- The bridge between them is Ant Browser LaunchServer plus a remote CDP browser profile in OpenClaw.
+- The bridge between them is Hi Browser LaunchServer plus a remote CDP browser profile in OpenClaw.
 
 ## Preconditions
 
-1. Ant Browser must be running on the same machine as the OpenClaw Gateway.
-2. Ant Browser LaunchServer should use a fixed port for stability. The project default is `19876`.
-3. If API auth is enabled in Ant Browser, keep the header at `X-Ant-Api-Key` unless you have a reason to change it.
+1. Hi Browser must be running on the same machine as the OpenClaw Gateway.
+2. Hi Browser LaunchServer should use a fixed port for stability. The project default is `19876`.
+3. If API auth is enabled in Hi Browser, keep the header at `X-Ant-Api-Key` unless you have a reason to change it.
 4. OpenClaw Browser must be enabled.
 
-## Ant Browser config
+## Hi Browser config
 
-Ant Browser already defaults to a fixed LaunchServer port:
+Hi Browser already defaults to a fixed LaunchServer port:
 
 ```yaml
 launch_server:
@@ -30,7 +30,7 @@ If you enable auth, keep the API key outside prompts and commit history.
 
 ## OpenClaw config
 
-Use a remote CDP browser profile that points to the Ant Browser LaunchServer URL.
+Use a remote CDP browser profile that points to the Hi Browser LaunchServer URL.
 
 If you want the skill files copied into an existing OpenClaw installation and the config merged automatically, use one of the bundled install scripts first.
 
@@ -71,7 +71,7 @@ The install scripts:
 - copy the full `ant-chrome-openclaw` skill folder into the target `skills` directory
 - back up an existing skill folder before replacing it
 - optionally merge the browser profile and skill entry into `openclaw.json`
-- preserve existing config fields outside the Ant Browser related sections
+- preserve existing config fields outside the Hi Browser related sections
 
 ```json
 {
@@ -99,7 +99,7 @@ The install scripts:
 }
 ```
 
-If Ant Browser auth is enabled, add either:
+If Hi Browser auth is enabled, add either:
 
 ```json
 {
@@ -117,7 +117,7 @@ or an equivalent secret reference supported by OpenClaw.
 
 ## 手动检查
 
-1. Start Ant Browser.
+1. Start Hi Browser.
 2. Verify LaunchServer:
 
 ```bash
@@ -149,4 +149,4 @@ curl http://127.0.0.1:19876/api/runtime/active
 - LaunchServer is loopback-only. This first phase is for same-host setups.
 - LaunchServer currently exposes `health`, `profiles`, exact-ID `status/stop`, `runtime active`, selector-based `runtime status/stop`, `launch`, and `launch logs`.
 - 选择器式 runtime control 当前只支持单目标控制，默认 `matchMode=unique`，显式只允许 `unique` 或 `first`。
-- `browser stop` in OpenClaw only detaches from remote CDP. It does not stop the Ant Browser instance itself.
+- `browser stop` in OpenClaw only detaches from remote CDP. It does not stop the Hi Browser instance itself.

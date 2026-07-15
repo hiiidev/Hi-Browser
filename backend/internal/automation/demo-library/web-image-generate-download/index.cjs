@@ -248,7 +248,7 @@ async function captureScreenshotIfNeeded(page, enabled, outputDir, label) {
 
 exports.run = async function run({ useBrowser, params = {}, artifact, artifactsDir, log }) {
   const pageUrl = normalizeText(params.pageUrl || params.url) || 'https://chatgpt.com/'
-  const prompt = normalizeText(params.prompt) || 'A cinematic chrome ant browser mascot, premium product lighting'
+  const prompt = normalizeText(params.prompt) || 'A cinematic blue Hi Browser orbital globe mascot, premium product lighting'
   const selectors = normalizeSelectors(params.selectors)
   const timeoutMs = normalizeInt(params.timeoutMs, 300000, 5000, 900000)
   const waitAfterLoadMs = normalizeInt(params.waitAfterLoadMs, 1200, 0, 30000)

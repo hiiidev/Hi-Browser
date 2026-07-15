@@ -119,7 +119,7 @@ export function createWebImageGenerateDownloadScriptDraft(): AutomationScriptRec
     tags: ["Playwright", "图片生成", "下载"],
     selectorText: "",
     paramsText: `{
-  "prompt": "A cinematic chrome ant browser mascot, premium product lighting"
+  "prompt": "A cinematic blue Hi Browser orbital globe mascot, premium product lighting"
 }`,
     scriptText: BACKEND_BUILTIN_SCRIPT_PLACEHOLDER,
     notes:
@@ -153,7 +153,7 @@ export function createWebImageGenerateDownloadScriptDraft(): AutomationScriptRec
         {
           name: "prompt",
           defaultValue:
-            "A cinematic chrome ant browser mascot, premium product lighting",
+            "A cinematic blue Hi Browser orbital globe mascot, premium product lighting",
           description: "发送到 ChatGPT 的图片生成提示词。",
           required: true,
         },

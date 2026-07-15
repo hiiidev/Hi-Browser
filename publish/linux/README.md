@@ -7,7 +7,7 @@
 
 Output artifacts:
 
-- `publish/output/AntBrowser-<version>-linux-<arch>.tar.gz`
+- `publish/output/HiBrowser-<version>-linux-<arch>.tar.gz`
 - `publish/output/ant-browser_<version>_<arch>.deb`
 
 ## Runtime policy

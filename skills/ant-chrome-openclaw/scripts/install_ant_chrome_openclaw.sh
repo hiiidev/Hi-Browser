@@ -19,7 +19,7 @@ Options:
   --target-skills-dir PATH   OpenClaw skills directory
   --config-file PATH         OpenClaw config path (for example openclaw.json)
   --browser-profile NAME     Browser profile name to create/update (default: ant-chrome)
-  --base-url URL             Ant Browser LaunchServer base URL
+  --base-url URL             Hi Browser LaunchServer base URL
   --api-header NAME          API auth header name
   --api-key VALUE            API key written into the skill entry
   --color VALUE              Browser profile color (default: #0F766E)
