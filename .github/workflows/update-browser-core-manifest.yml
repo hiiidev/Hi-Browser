@@ -65,7 +65,7 @@ jobs:
             git switch --force-create "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
           else
             git switch --orphan "$TARGET_BRANCH"
-            git rm -rf .
+            git rm -rf . >/dev/null 2>&1 || true
           fi
           cp "$RUNNER_TEMP/browser-core-manifest.json" browser-core-manifest.json
           git add browser-core-manifest.json
