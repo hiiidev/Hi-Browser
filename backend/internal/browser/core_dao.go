@@ -27,7 +27,11 @@ func NewSQLiteCoreDAO(db *sql.DB) *SQLiteCoreDAO {
 // List 查询所有内核，按 sort_order 升序
 func (d *SQLiteCoreDAO) List() ([]Core, error) {
 	rows, err := d.db.Query(`
-		SELECT core_id, core_name, core_path, is_default
+		SELECT core_id, core_name, core_path, is_default,
+		       provider, source_repository, release_tag, browser_version, chromium_major,
+		       asset_id, asset_name, platform, architecture, archive_sha256, executable_path,
+		       installed_at, last_verified_at, verification_status, installation_status,
+		       managed_by_app, release_url, capabilities_json, archive_size
 		FROM browser_cores ORDER BY sort_order ASC, created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("查询内核列表失败: %w", err)
@@ -37,11 +41,16 @@ func (d *SQLiteCoreDAO) List() ([]Core, error) {
 	var list []Core
 	for rows.Next() {
 		var c Core
-		var isDefault int
-		if err := rows.Scan(&c.CoreId, &c.CoreName, &c.CorePath, &isDefault); err != nil {
+		var isDefault, managed int
+		if err := rows.Scan(&c.CoreId, &c.CoreName, &c.CorePath, &isDefault,
+			&c.Provider, &c.SourceRepository, &c.ReleaseTag, &c.BrowserVersion, &c.ChromiumMajor,
+			&c.AssetId, &c.AssetName, &c.Platform, &c.Architecture, &c.ArchiveSha256, &c.ExecutablePath,
+			&c.InstalledAt, &c.LastVerifiedAt, &c.VerificationStatus, &c.InstallationStatus,
+			&managed, &c.ReleaseUrl, &c.CapabilitiesJson, &c.ArchiveSize); err != nil {
 			return nil, fmt.Errorf("读取内核行失败: %w", err)
 		}
 		c.IsDefault = isDefault == 1
+		c.ManagedByApp = managed == 1
 		list = append(list, c)
 	}
 	return list, rows.Err()
@@ -54,14 +63,34 @@ func (d *SQLiteCoreDAO) Upsert(core Core) error {
 	if core.IsDefault {
 		isDefault = 1
 	}
+	managed := 0
+	if core.ManagedByApp {
+		managed = 1
+	}
 	_, err := d.db.Exec(`
-		INSERT INTO browser_cores (core_id, core_name, core_path, is_default, created_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO browser_cores (
+		  core_id, core_name, core_path, is_default, created_at, provider, source_repository,
+		  release_tag, browser_version, chromium_major, asset_id, asset_name, platform, architecture,
+		  archive_sha256, executable_path, installed_at, last_verified_at, verification_status,
+		  installation_status, managed_by_app, release_url, capabilities_json, archive_size)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(core_id) DO UPDATE SET
 		  core_name  = excluded.core_name,
 		  core_path  = excluded.core_path,
-		  is_default = excluded.is_default`,
-		core.CoreId, core.CoreName, core.CorePath, isDefault, now,
+		  is_default = excluded.is_default,
+		  provider = excluded.provider, source_repository = excluded.source_repository,
+		  release_tag = excluded.release_tag, browser_version = excluded.browser_version,
+		  chromium_major = excluded.chromium_major, asset_id = excluded.asset_id,
+		  asset_name = excluded.asset_name, platform = excluded.platform, architecture = excluded.architecture,
+		  archive_sha256 = excluded.archive_sha256, executable_path = excluded.executable_path,
+		  installed_at = excluded.installed_at, last_verified_at = excluded.last_verified_at,
+		  verification_status = excluded.verification_status, installation_status = excluded.installation_status,
+		  managed_by_app = excluded.managed_by_app, release_url = excluded.release_url,
+		  capabilities_json = excluded.capabilities_json, archive_size = excluded.archive_size`,
+		core.CoreId, core.CoreName, core.CorePath, isDefault, now, core.Provider, core.SourceRepository,
+		core.ReleaseTag, core.BrowserVersion, core.ChromiumMajor, core.AssetId, core.AssetName, core.Platform, core.Architecture,
+		core.ArchiveSha256, core.ExecutablePath, core.InstalledAt, core.LastVerifiedAt, core.VerificationStatus,
+		core.InstallationStatus, managed, core.ReleaseUrl, core.CapabilitiesJson, core.ArchiveSize,
 	)
 	if err != nil {
 		return fmt.Errorf("保存内核配置失败: %w", err)

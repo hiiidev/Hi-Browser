@@ -20,6 +20,7 @@ export interface FingerprintConfig {
   brand?: string           // --fingerprint-brand=
   platform?: string        // --fingerprint-platform=
   lang?: string            // --lang=
+	acceptLang?: string      // --accept-lang=
   timezone?: string        // --timezone=
 
   // 屏幕与窗口
@@ -61,6 +62,7 @@ export const KEY_MAP: Record<string, keyof FingerprintConfig> = {
   '--fingerprint-brand': 'brand',
   '--fingerprint-platform': 'platform',
   '--lang': 'lang',
+	'--accept-lang': 'acceptLang',
   '--timezone': 'timezone',
   '--window-size': 'resolution',
   '--fingerprint-color-depth': 'colorDepth',
@@ -82,8 +84,12 @@ export function serialize(config: FingerprintConfig): string[] {
   const args: string[] = []
   if (config.seed) args.push(`--fingerprint=${config.seed}`)
   if (config.brand) args.push(`--fingerprint-brand=${config.brand}`)
-  if (config.platform) args.push(`--fingerprint-platform=${config.platform}`)
-  if (config.lang) args.push(`--lang=${config.lang}`)
+	if (config.platform) args.push(`--fingerprint-platform=${config.platform === 'mac' ? 'macos' : config.platform}`)
+	if (config.lang) {
+		args.push(`--lang=${config.lang}`)
+		const primary = config.lang.split('-')[0]
+		args.push(`--accept-lang=${config.acceptLang || `${config.lang},${primary}`}`)
+	}
   if (config.timezone) {
     // 如果是 system，替换为实际系统时区
     const tz = config.timezone === 'system' ? getSystemTimezone() : config.timezone
@@ -109,7 +115,22 @@ export function serialize(config: FingerprintConfig): string[] {
   if (config.mediaDevices) args.push(`--fingerprint-media-devices=${config.mediaDevices}`)
   if (config.touchPoints) args.push(`--fingerprint-touch-points=${config.touchPoints}`)
 
-  return [...args, ...(config.unknownArgs ?? [])]
+	return dedupeArgs([...args, ...(config.unknownArgs ?? [])])
+}
+
+export function dedupeArgs(args: string[]): string[] {
+	const lastIndex = new Map<string, number>()
+	args.forEach((arg, index) => lastIndex.set(arg.split('=', 1)[0], index))
+	return args.filter((arg, index) => lastIndex.get(arg.split('=', 1)[0]) === index)
+}
+
+export function applyFingerprintCapabilities(args: string[], chromiumMajor = 0): string[] {
+	const normalized = dedupeArgs(args.map(arg => arg === '--fingerprint-platform=mac' ? '--fingerprint-platform=macos' : arg))
+	if (chromiumMajor < 144) return normalized
+	const legacy = new Set(['--fingerprint-gpu-vendor', '--fingerprint-gpu-renderer', '--disable-gpu-fingerprint'])
+	const filtered = normalized.filter(arg => !legacy.has(arg.split('=', 1)[0]))
+	if (filtered.length !== normalized.length && !filtered.some(arg => arg.startsWith('--disable-spoofing='))) filtered.push('--disable-spoofing=gpu')
+	return filtered
 }
 
 // string[] → FingerprintConfig
@@ -215,7 +236,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
     description: '模拟 Mac 设计师用户，Apple GPU，Retina 分辨率',
     config: {
       brand: 'Chrome',
-      platform: 'mac',
+		platform: 'macos',
       lang: 'zh-CN',
       timezone: 'Asia/Shanghai',
       resolution: '2560,1440',

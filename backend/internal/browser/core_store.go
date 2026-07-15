@@ -46,6 +46,10 @@ func (m *Manager) SaveCore(input CoreInput) error {
 			}
 		}
 		core := Core{CoreId: coreId, CoreName: coreName, CorePath: corePath, IsDefault: input.IsDefault}
+		if input.Metadata != nil {
+			core = *input.Metadata
+			core.CoreId, core.CoreName, core.CorePath, core.IsDefault = coreId, coreName, corePath, input.IsDefault
+		}
 		if err := m.CoreDAO.Upsert(core); err != nil {
 			return err
 		}
@@ -96,6 +100,27 @@ func (m *Manager) DeleteCore(coreId string) error {
 	if coreId == "" {
 		return fmt.Errorf("内核ID不能为空")
 	}
+	core, found := m.GetCore(coreId)
+	if !found {
+		return fmt.Errorf("内核不存在: %s", coreId)
+	}
+	if core.IsDefault {
+		return fmt.Errorf("默认内核不能删除，请先切换默认内核")
+	}
+	if count := m.CountInstancesByCore(coreId); count > 0 {
+		return fmt.Errorf("该内核仍被 %d 个 Profile 引用，请先迁移这些 Profile", count)
+	}
+	m.Mutex.Lock()
+	for profileID, process := range m.BrowserProcesses {
+		if process == nil {
+			continue
+		}
+		if profile, ok := m.Profiles[profileID]; ok && strings.EqualFold(normalizeProfileCoreID(profile.CoreId), coreId) {
+			m.Mutex.Unlock()
+			return fmt.Errorf("该内核正在被运行实例使用，不能删除")
+		}
+	}
+	m.Mutex.Unlock()
 
 	if m.CoreDAO != nil {
 		if err := m.CoreDAO.Delete(coreId); err != nil {

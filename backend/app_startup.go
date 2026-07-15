@@ -141,6 +141,7 @@ func (a *App) startupInitManagers(cfg *config.Config, db *database.DB) {
 		logger.New("Browser").Error("启动清理回收站失败", logger.F("error", err))
 	}
 	a.autoDetectCores()
+	a.startBrowserCoreMaintenance()
 	a.loadProxies()
 	a.reconcileProfileProxyBindings()
 }

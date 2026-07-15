@@ -48,9 +48,23 @@ type Config struct {
 	Runtime      RuntimeConfig      `yaml:"runtime"`
 	Logging      LoggingConfig      `yaml:"logging"`
 	Browser      BrowserConfig      `yaml:"browser"`
+	BrowserCore  BrowserCoreConfig  `yaml:"browser_core"`
 	ProxyCheck   ProxyCheckConfig   `yaml:"proxy_check"`
 	LaunchServer LaunchServerConfig `yaml:"launch_server"`
 	Automation   AutomationConfig   `yaml:"automation"`
+}
+
+type BrowserCoreConfig struct {
+	Provider               string `yaml:"provider" json:"provider"`
+	Channel                string `yaml:"channel" json:"channel"`
+	ManifestURL            string `yaml:"manifest_url,omitempty" json:"manifestUrl"`
+	AutoCheckUpdates       *bool  `yaml:"auto_check_updates,omitempty" json:"autoCheckUpdates"`
+	AutoInstallWhenMissing *bool  `yaml:"auto_install_when_missing,omitempty" json:"autoInstallWhenMissing"`
+	AutoInstallRecommended bool   `yaml:"auto_install_recommended,omitempty" json:"autoInstallRecommended"`
+	KeepVersions           int    `yaml:"keep_versions" json:"keepVersions"`
+	DownloadProxyMode      string `yaml:"download_proxy_mode,omitempty" json:"downloadProxyMode"`
+	SkippedVersion         string `yaml:"skipped_version,omitempty" json:"skippedVersion"`
+	LastUpdateCheckAt      string `yaml:"last_update_check_at,omitempty" json:"lastUpdateCheckAt"`
 }
 
 type ProxyCheckConfig struct {
@@ -126,10 +140,29 @@ type BrowserConfig struct {
 }
 
 type BrowserCore struct {
-	CoreId    string `yaml:"core_id" json:"coreId"`
-	CoreName  string `yaml:"core_name" json:"coreName"`
-	CorePath  string `yaml:"core_path" json:"corePath"`
-	IsDefault bool   `yaml:"is_default" json:"isDefault"`
+	CoreId             string `yaml:"core_id" json:"coreId"`
+	CoreName           string `yaml:"core_name" json:"coreName"`
+	CorePath           string `yaml:"core_path" json:"corePath"`
+	IsDefault          bool   `yaml:"is_default" json:"isDefault"`
+	Provider           string `yaml:"provider,omitempty" json:"provider"`
+	SourceRepository   string `yaml:"source_repository,omitempty" json:"sourceRepository"`
+	ReleaseTag         string `yaml:"release_tag,omitempty" json:"releaseTag"`
+	BrowserVersion     string `yaml:"browser_version,omitempty" json:"browserVersion"`
+	ChromiumMajor      int    `yaml:"chromium_major,omitempty" json:"chromiumMajor"`
+	AssetId            int64  `yaml:"asset_id,omitempty" json:"assetId"`
+	AssetName          string `yaml:"asset_name,omitempty" json:"assetName"`
+	Platform           string `yaml:"platform,omitempty" json:"platform"`
+	Architecture       string `yaml:"architecture,omitempty" json:"architecture"`
+	ArchiveSha256      string `yaml:"archive_sha256,omitempty" json:"archiveSha256"`
+	ExecutablePath     string `yaml:"executable_path,omitempty" json:"executablePath"`
+	InstalledAt        string `yaml:"installed_at,omitempty" json:"installedAt"`
+	LastVerifiedAt     string `yaml:"last_verified_at,omitempty" json:"lastVerifiedAt"`
+	VerificationStatus string `yaml:"verification_status,omitempty" json:"verificationStatus"`
+	InstallationStatus string `yaml:"installation_status,omitempty" json:"installationStatus"`
+	ManagedByApp       bool   `yaml:"managed_by_app,omitempty" json:"managedByApp"`
+	ReleaseUrl         string `yaml:"release_url,omitempty" json:"releaseUrl"`
+	CapabilitiesJson   string `yaml:"capabilities_json,omitempty" json:"capabilitiesJson"`
+	ArchiveSize        int64  `yaml:"archive_size,omitempty" json:"archiveSize"`
 }
 
 type BrowserProxy struct {

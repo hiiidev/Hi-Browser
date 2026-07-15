@@ -217,6 +217,7 @@ mkdir -p "$APP_STAGE/bin" "$APP_STAGE/data" "$DEB_STAGE"
 
 cp "$APP_BIN" "$APP_STAGE/ant-chrome"
 cp "$ROOT_DIR/publish/config.init.linux.yaml" "$APP_STAGE/config.yaml"
+cp "$ROOT_DIR/browser-core-manifest.json" "$APP_STAGE/browser-core-manifest.json"
 cp "$XRAY_SRC" "$APP_STAGE/bin/xray"
 cp "$SINGBOX_SRC" "$APP_STAGE/bin/sing-box"
 chmod +x "$APP_STAGE/ant-chrome" "$APP_STAGE/bin/xray" "$APP_STAGE/bin/sing-box"
@@ -244,6 +245,7 @@ done
 
 cp "$APP_STAGE/ant-chrome" "$INSTALL_ROOT/ant-chrome"
 cp "$APP_STAGE/config.yaml" "$INSTALL_ROOT/config.yaml"
+cp "$APP_STAGE/browser-core-manifest.json" "$INSTALL_ROOT/browser-core-manifest.json"
 cp "$APP_STAGE/bin/xray" "$INSTALL_ROOT/bin/xray"
 cp "$APP_STAGE/bin/sing-box" "$INSTALL_ROOT/bin/sing-box"
 if [[ -f "$APP_STAGE/chrome/README.md" ]]; then

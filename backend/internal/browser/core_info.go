@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // GetChromeVersion 从 manifest.json 读取 Chrome 版本号
@@ -42,6 +43,35 @@ func (m *Manager) GetChromeVersion(corePath string) string {
 	}
 
 	return manifest.Version
+}
+
+func (m *Manager) VerifyCore(coreID string) CoreValidateResult {
+	core, ok := m.GetCore(coreID)
+	if !ok {
+		return CoreValidateResult{Valid: false, Message: "内核不存在"}
+	}
+	result := m.ValidateCorePath(core.CorePath)
+	core.LastVerifiedAt = time.Now().Format(time.RFC3339)
+	if result.Valid {
+		executable, _, found := FindCoreExecutable(m.ResolveRelativePath(core.CorePath))
+		if !found {
+			result = CoreValidateResult{Valid: false, Message: "未找到浏览器可执行文件"}
+		} else if err := validateExecutableArchitecture(executable); err != nil {
+			result = CoreValidateResult{Valid: false, Message: err.Error()}
+		} else {
+			core.ExecutablePath = executable
+		}
+	}
+	if result.Valid {
+		core.VerificationStatus = "verified-executable"
+	} else {
+		core.VerificationStatus = "invalid"
+	}
+	if m.CoreDAO != nil {
+		_ = m.CoreDAO.Upsert(core)
+		m.syncCoresFromDAO()
+	}
+	return result
 }
 
 // CountInstancesByCore 统计使用指定内核的实例数量

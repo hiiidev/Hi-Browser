@@ -7,6 +7,12 @@ export interface CoreDisplayInfo {
   pathMessage: string
   chromeVersion: string
   instanceCount: number
+	provider: string
+	platform: string
+	architecture: string
+	archiveSha256: string
+	verificationStatus: string
+	archiveSize: number
 }
 
 export interface CoreSettingsForm {
@@ -35,7 +41,13 @@ export interface CoreDownloadForm {
 }
 
 export interface CoreDownloadProgress {
+	taskId?: string
   phase: string
   progress: number
   message: string
+	downloadedBytes?: number
+	totalBytes?: number
+	speedBytesPerSecond?: number
+	errorDetail?: string
+	canRetry?: boolean
 }

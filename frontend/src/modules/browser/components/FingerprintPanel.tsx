@@ -9,11 +9,13 @@ import {
   getSystemTimezone,
   randomFingerprintSeed,
   serialize,
+	applyFingerprintCapabilities,
 } from '../utils/fingerprintSerializer'
 
 interface FingerprintPanelProps {
   value: string[]
   onChange: (args: string[]) => void
+	chromiumMajor?: number
 }
 
 const BRAND_OPTIONS = [
@@ -27,7 +29,7 @@ const BRAND_OPTIONS = [
 const PLATFORM_OPTIONS = [
   { value: '', label: '不设置' },
   { value: 'windows', label: 'Windows' },
-  { value: 'mac', label: 'macOS' },
+	{ value: 'macos', label: 'macOS' },
   { value: 'linux', label: 'Linux' },
 ]
 
@@ -184,7 +186,7 @@ const PRESET_OPTIONS = [
   ...FINGERPRINT_PRESETS.map(p => ({ value: p.id, label: p.name })),
 ]
 
-export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
+export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: FingerprintPanelProps) {
   const [config, setConfig] = useState<FingerprintConfig>(() => deserialize(value))
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [, setCustomRenderer] = useState('')
@@ -197,7 +199,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   const update = (patch: Partial<FingerprintConfig>) => {
     const next = { ...config, ...patch }
     setConfig(next)
-    onChange(serialize(next))
+		onChange(applyFingerprintCapabilities(serialize(next), chromiumMajor))
   }
 
   const handlePresetChange = (presetId: string) => {
@@ -211,14 +213,14 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       unknownArgs: config.unknownArgs,
     }
     setConfig(next)
-    onChange(serialize(next))
+		onChange(applyFingerprintCapabilities(serialize(next), chromiumMajor))
   }
 
   const handleAdvancedChange = (text: string) => {
     const args = text.split('\n').map(s => s.trim()).filter(Boolean)
     const parsed = deserialize(args)
     setConfig(parsed)
-    onChange(serialize(parsed))
+		onChange(applyFingerprintCapabilities(serialize(parsed), chromiumMajor))
   }
 
   const rendererOptions = config.webglVendor
@@ -229,7 +231,9 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
     ? !rendererOptions.some(o => o.value === config.webglRenderer && o.value !== 'custom')
     : false
 
-  const advancedText = serialize(config).join('\n')
+	const advancedText = applyFingerprintCapabilities(serialize(config), chromiumMajor).join('\n')
+	const gpuManualUnsupported = chromiumMajor >= 144
+	const hostPlatform = typeof navigator === 'undefined' ? '' : (/Mac/i.test(navigator.platform) ? 'macos' : /Win/i.test(navigator.platform) ? 'windows' : /Linux/i.test(navigator.platform) ? 'linux' : '')
 
   return (
     <div className="space-y-4">
@@ -261,8 +265,8 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             <RefreshCw className="w-3.5 h-3.5" />
             随机
           </button>
-        </div>
-      </div>
+		</div>
+	  </div>
 
       <ConfirmModal
         open={confirmSeedOpen}
@@ -278,7 +282,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-bg-hover)] border border-[var(--color-border)]">
         <Wand2 className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
         <div className="flex-1 min-w-0">
-          <Select
+			<Select
             value=""
             onChange={e => handlePresetChange(e.target.value)}
             options={PRESET_OPTIONS}
@@ -308,13 +312,14 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             )} />
           </FormItem>
         </div>
+		{config.platform && hostPlatform && config.platform !== hostPlatform && <p className="mt-2 text-xs text-[var(--color-warning)]">模拟平台与当前宿主平台不同，字体、GPU 与系统 API 可能出现一致性风险。</p>}
       </div>
 
       {/* 屏幕与硬件 */}
       <div>
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">屏幕与硬件</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormItem label="分辨率">
+			<FormItem label="启动窗口大小">
             <Select
               value={config.resolution ?? ''}
               onChange={e => update({ resolution: e.target.value || undefined, customResolution: undefined })}
@@ -322,7 +327,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             />
           </FormItem>
           {config.resolution === 'custom' && (
-            <FormItem label="自定义分辨率">
+			<FormItem label="自定义启动窗口大小">
               <Input value={config.customResolution ?? ''} onChange={e => update({ customResolution: e.target.value || undefined })} placeholder="1600,900" />
             </FormItem>
           )}
@@ -349,7 +354,8 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             <Select
               value={config.webglVendor ?? ''}
               onChange={e => update({ webglVendor: e.target.value || undefined, webglRenderer: undefined })}
-              options={WEBGL_VENDOR_OPTIONS}
+				options={WEBGL_VENDOR_OPTIONS}
+				disabled={gpuManualUnsupported}
             />
           </FormItem>
           <FormItem label="WebGL 渲染器">
@@ -371,10 +377,11 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
                   }
                 }}
                 options={rendererOptions}
-                disabled={!config.webglVendor}
+				disabled={!config.webglVendor || gpuManualUnsupported}
               />
-            )}
-          </FormItem>
+			)}
+		  </FormItem>
+			{gpuManualUnsupported && <p className="md:col-span-2 text-xs text-[var(--color-warning)]">不受当前 Chromium 144+ 内核支持，GPU 使用内核策略或真实 GPU；无效的旧参数不会传给浏览器。</p>}
           <FormItem label="Canvas 噪声">
             <Select
               value={config.canvasNoise === undefined ? '' : String(config.canvasNoise)}
@@ -438,7 +445,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
           <span>高级模式（原始参数）</span>
           {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
-        {advancedOpen && (
+		{advancedOpen && (
           <div className="px-4 pb-4 pt-2 border-t border-[var(--color-border)]">
             <p className="text-xs text-[var(--color-text-muted)] mb-2">每行一个参数，修改后自动同步到上方控件</p>
             <Textarea
@@ -448,8 +455,12 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
               placeholder="--fingerprint-brand=Chrome"
             />
           </div>
-        )}
-      </div>
-    </div>
+		)}
+		</div>
+		<div className="border border-[var(--color-border)] rounded-lg p-3">
+			<p className="text-xs font-medium text-[var(--color-text-muted)] mb-2">最终启动参数</p>
+			<pre className="text-xs leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]">{advancedText || '未配置指纹参数'}</pre>
+		</div>
+	</div>
   )
 }

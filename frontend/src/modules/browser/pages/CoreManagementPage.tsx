@@ -1,15 +1,16 @@
 ﻿import { useEffect, useState, useCallback } from 'react'
-import { FolderOpen } from 'lucide-react'
-import { Badge, Button, Card, ConfirmModal, Table, toast } from '../../../shared/components'
+import { Download, FolderOpen } from 'lucide-react'
+import { Badge, Button, Card, ConfirmModal, Input, Switch, Table, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
-import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy } from '../types'
-import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, importLocalBrowserCore, BrowserCoreDownload, fetchBrowserProxies, redownloadBrowserCore } from '../api'
+import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy, BrowserCoreRelease, BrowserCoreSettings } from '../types'
+import { fetchBrowserCores, saveBrowserCore, deleteBrowserCore, setDefaultBrowserCore, validateBrowserCorePath, verifyBrowserCore, openCorePath, fetchBrowserSettings, saveBrowserSettings, fetchCoreExtendedInfo, scanBrowserCores, importLocalBrowserCore, BrowserCoreDownload, fetchBrowserProxies, redownloadBrowserCore, fetchBrowserCoreReleases, installBrowserCoreRelease, cancelBrowserCoreDownload, retryBrowserCoreDownload, fetchBrowserCoreSettings, saveBrowserCoreSettings } from '../api'
 import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime'
 import { CoreDownloadModal } from './coreManagement/CoreDownloadModal'
 import { CoreEditModal } from './coreManagement/CoreEditModal'
 import { CoreSettingsCard } from './coreManagement/CoreSettingsCard'
 import { CoreSettingsModal } from './coreManagement/CoreSettingsModal'
 import type { CoreDisplayInfo, CoreDownloadForm, CoreDownloadProgress, CoreEditForm, CoreSettingsForm } from './coreManagement.types'
+import { resolveActionErrorMessage } from '../utils/actionErrors'
 
 export function CoreManagementPage() {
   const [cores, setCores] = useState<BrowserCore[]>([])
@@ -61,6 +62,10 @@ export function CoreManagementPage() {
   const [downloadProgress, setDownloadProgress] = useState<CoreDownloadProgress | null>(null)
   const [importProgress, setImportProgress] = useState<CoreDownloadProgress | null>(null)
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
+	const [releases, setReleases] = useState<BrowserCoreRelease[]>([])
+	const [releasesLoading, setReleasesLoading] = useState(false)
+	const [activeTaskId, setActiveTaskId] = useState('')
+	const [coreSettings, setCoreSettings] = useState<BrowserCoreSettings>({ provider: 'fingerprint-chromium-static', channel: 'stable', manifestUrl: 'https://raw.githubusercontent.com/hiiidev/Hi-Browser/browser-core-index/browser-core-manifest.json', autoCheckUpdates: true, autoInstallWhenMissing: true, autoInstallRecommended: false, keepVersions: 2, downloadProxyMode: 'system', skippedVersion: '', lastUpdateCheckAt: '' })
 
   useEffect(() => {
     loadData()
@@ -81,6 +86,16 @@ export function CoreManagementPage() {
       }
     }
     EventsOn('download:progress', onDownloadProgress)
+		const onManagedProgress = (data: CoreDownloadProgress) => {
+			setDownloadProgress(data)
+			if (data.phase === 'completed') {
+				toast.success(data.message)
+				setTimeout(() => { setDownloadModalOpen(false); setDownloadProgress(null); setActiveTaskId(''); loadData() }, 900)
+			} else if (data.phase === 'failed') {
+				toast.error(data.message)
+			}
+		}
+		EventsOn('browser-core:download-progress', onManagedProgress)
 
     const onImportProgress = (data: { phase: string; progress: number; message: string }) => {
       setImportProgress(data)
@@ -92,6 +107,7 @@ export function CoreManagementPage() {
 
     return () => {
       EventsOff('download:progress')
+			EventsOff('browser-core:download-progress')
       EventsOff('core-import:progress')
     }
   }, [])
@@ -105,6 +121,7 @@ export function CoreManagementPage() {
         fetchBrowserCores(),
         fetchCoreExtendedInfo(),
       ])
+			fetchBrowserCoreSettings().then(setCoreSettings)
 
       setSettings(settingsData)
       setCores(coreList)
@@ -127,10 +144,21 @@ export function CoreManagementPage() {
             pathMessage: result.message,
             chromeVersion: extended?.chromeVersion || '',
             instanceCount: extended?.instanceCount || 0,
+						provider: core.provider || (core.managedByApp ? 'fingerprint-chromium' : '手动导入'),
+						platform: core.platform || '',
+						architecture: core.architecture || '',
+						archiveSha256: core.archiveSha256 || '',
+						verificationStatus: core.verificationStatus || '',
+						archiveSize: core.archiveSize || 0,
           }
         })
       )
       setDisplayList(displayInfoList)
+			setReleasesLoading(true)
+			fetchBrowserCoreReleases()
+				.then(setReleases)
+				.catch(error => toast.warning(resolveActionErrorMessage(error, '暂时无法读取可安装版本')))
+				.finally(() => setReleasesLoading(false))
     } finally {
       setLoading(false)
     }
@@ -172,6 +200,9 @@ export function CoreManagementPage() {
       width: '130px',
       render: (val) => val || '-',
     },
+		{ key: 'platform', title: '平台', width: '120px', render: (_, record) => record.platform ? `${record.platform}/${record.architecture}` : '-' },
+		{ key: 'provider', title: '安装来源', width: '150px' },
+		{ key: 'archiveSha256', title: 'SHA-256', width: '150px', render: value => value ? <span className="font-mono text-xs" title={String(value)}>{String(value).slice(0, 12)}...</span> : '-' },
     {
       key: 'instanceCount',
       title: '使用实例',
@@ -197,7 +228,7 @@ export function CoreManagementPage() {
     {
       key: 'actions',
       title: '操作',
-      width: '220px',
+	  width: '390px',
       render: (_, record) => (
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleOpenPath(record.corePath) }} title="打开目录">
@@ -209,6 +240,7 @@ export function CoreManagementPage() {
           <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleRedownload(record) }}>
             重新下载
           </Button>
+					<Button size="sm" variant="ghost" onClick={async e => { e.stopPropagation(); const result=await verifyBrowserCore(record.coreId); result.valid ? toast.success(result.message) : toast.error(result.message); await loadData() }}>检查完整性</Button>
           {!record.isDefault && (
             <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleSetDefault(record.coreId) }}>
               设为默认
@@ -221,6 +253,26 @@ export function CoreManagementPage() {
       ),
     },
   ]
+
+	const releaseColumns: TableColumn<BrowserCoreRelease>[] = [
+		{ key: 'version', title: 'Release', width: '130px' },
+		{ key: 'publishedAt', title: '发布时间', width: '170px', render: value => value ? new Date(String(value)).toLocaleString() : '-' },
+		{ key: 'asset', title: '当前平台资产', render: value => { const asset = value as BrowserCoreRelease['asset']; return <div><div>{asset.name}</div><div className="text-xs text-[var(--color-text-muted)]">{asset.platform}/{asset.architecture} · {(asset.size / 1048576).toFixed(1)} MB</div></div> } },
+		{ key: 'notes', title: 'Release notes', render: value => <span className="line-clamp-2 text-xs text-[var(--color-text-muted)]">{String(value || '-')}</span> },
+		{ key: 'actions', title: '操作', width: '110px', render: (_, release) => <Button size="sm" onClick={() => handleInstallRelease(release)}><Download className="w-4 h-4" />安装</Button> },
+	]
+
+	const handleInstallRelease = async (release: BrowserCoreRelease) => {
+		setDownloadForm({ name: `fingerprint-chromium-${release.version}`, url: release.asset.downloadUrl, proxyMode: 'system', proxyId: '', mode: 'download' })
+		setDownloadModalOpen(true)
+		setDownloadProgress({ phase: 'starting', progress: 0, message: '正在创建安装任务...' })
+		try {
+			const taskId = await installBrowserCoreRelease(release.releaseTag, '__system__')
+			setActiveTaskId(taskId)
+		} catch (error: any) {
+			setDownloadProgress({ phase: 'failed', progress: 0, message: error?.message || '创建安装任务失败', errorDetail: error?.message })
+		}
+	}
 
   // 打开内核路径
   const handleOpenPath = async (corePath: string) => {
@@ -458,10 +510,30 @@ export function CoreManagementPage() {
         </div>
       )}
 
+		{coreSettings.autoInstallWhenMissing && !loading && !displayList.some(core => core.pathValid) && (
+			<div className="border border-[var(--color-warning)]/50 bg-[var(--color-warning)]/10 p-4">
+				<div className="flex items-start justify-between gap-4">
+					<div><h2 className="text-base font-semibold text-[var(--color-text-primary)]">准备浏览器内核</h2><p className="mt-1 text-sm text-[var(--color-text-secondary)]">当前没有可用内核。确认后将安装与本机系统和架构匹配的 fingerprint-chromium，不会静默下载。</p>{releases[0] && <p className="mt-2 text-xs text-[var(--color-text-muted)]">{releases[0].releaseTag} · {releases[0].asset.platform}/{releases[0].asset.architecture} · {(releases[0].asset.size / 1048576).toFixed(1)} MB · GitHub Releases</p>}</div>
+					{releases[0] && <Button onClick={() => handleInstallRelease(releases[0])}><Download className="w-4 h-4" />确认并安装</Button>}
+				</div>
+			</div>
+		)}
+
       <CoreSettingsCard settings={settings} onEdit={handleEditSettings} />
 
+		<Card title="自动安装与更新" subtitle="只检查和推荐；实际下载仍需用户确认">
+			<div className="mb-4 border-b border-[var(--color-border)] pb-3 text-xs text-[var(--color-text-muted)] break-all">版本索引：{coreSettings.manifestUrl}</div>
+			<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+				<label className="flex items-center justify-between gap-3"><span className="text-sm">启动后检查更新</span><Switch checked={coreSettings.autoCheckUpdates} onChange={value => setCoreSettings(prev => ({ ...prev, autoCheckUpdates: value }))} /></label>
+				<label className="flex items-center justify-between gap-3"><span className="text-sm">无内核时显示自动安装引导</span><Switch checked={coreSettings.autoInstallWhenMissing} onChange={value => setCoreSettings(prev => ({ ...prev, autoInstallWhenMissing: value }))} /></label>
+				<label className="flex items-center justify-between gap-3"><span className="text-sm">自动安装推荐版本</span><Switch checked={coreSettings.autoInstallRecommended} onChange={value => setCoreSettings(prev => ({ ...prev, autoInstallRecommended: value }))} /></label>
+				<label className="flex items-center gap-3"><span className="text-sm shrink-0">保留版本数量</span><Input type="number" min={1} max={10} value={coreSettings.keepVersions} onChange={event => setCoreSettings(prev => ({ ...prev, keepVersions: Math.max(1, Math.min(10, Number(event.target.value) || 1)) }))} /></label>
+			</div>
+			<div className="mt-4 flex justify-end"><Button size="sm" onClick={async () => { try { await saveBrowserCoreSettings(coreSettings); toast.success('内核更新设置已保存') } catch (error:any) { toast.error(error?.message || '保存失败') } }}>保存设置</Button></div>
+		</Card>
+
       {/* 内核列表卡片 */}
-      <Card title="内核列表" subtitle="已配置的 Chrome 内核">
+		<Card title="已安装" subtitle="已验证并注册的浏览器内核">
         <Table
           columns={columns}
           data={displayList}
@@ -469,7 +541,11 @@ export function CoreManagementPage() {
           loading={loading}
           emptyText="暂无内核，请添加内核"
         />
-      </Card>
+		</Card>
+
+		<Card title="可安装版本" subtitle={releases.some(item => item.stale) ? '正在显示上次成功缓存，数据可能已过期' : 'fingerprint-chromium 最近稳定版本'}>
+			<Table columns={releaseColumns} data={releases} rowKey="releaseTag" loading={releasesLoading} emptyText="当前平台暂无可安装版本" />
+		</Card>
 
       <CoreSettingsModal
         open={settingsModalOpen}
@@ -512,6 +588,15 @@ export function CoreManagementPage() {
         setProgress={setDownloadProgress}
         onClose={() => setDownloadModalOpen(false)}
         onStart={handleStartDownloadCore}
+			onCancelTask={() => {
+				if (activeTaskId) void cancelBrowserCoreDownload(activeTaskId)
+				setDownloadProgress(prev => prev ? { ...prev, phase: 'cancelled', message: '正在取消...' } : prev)
+			}}
+			onRetry={async () => {
+				if (!activeTaskId) return
+				const taskId = await retryBrowserCoreDownload(activeTaskId)
+				setActiveTaskId(taskId)
+			}}
       />
     </div>
   )

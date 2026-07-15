@@ -507,6 +507,12 @@ function New-WindowsStaging {
     }
     Copy-Item -LiteralPath $releaseConfig -Destination (Join-Path $stagingDir "config.yaml") -Force
     Write-Host "✓ 复制发布配置模板 publish\config.init.yaml -> config.yaml"
+	$coreManifest = Join-Path $repoRoot "browser-core-manifest.json"
+	if (-not (Test-Path -LiteralPath $coreManifest -PathType Leaf)) {
+		throw "未找到浏览器内核 Manifest: browser-core-manifest.json"
+	}
+	Copy-Item -LiteralPath $coreManifest -Destination (Join-Path $stagingDir "browser-core-manifest.json") -Force
+	Write-Host "✓ 复制浏览器内核 Manifest"
 
     $stagingBinDir = Join-Path $stagingDir "bin"
     New-Item -ItemType Directory -Path $stagingBinDir -Force | Out-Null

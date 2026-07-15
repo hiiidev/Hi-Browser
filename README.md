@@ -16,6 +16,30 @@ Ant Browser 当前推荐配套使用的浏览器内核，来源于开源项目 [
 
 这个项目为 Ant Browser 的内核准备提供了直接可用的基础来源，这里先对原项目做明确推荐与致谢。
 
+### 自动安装浏览器内核
+
+内核管理页通过静态 `browser-core-manifest.json` 读取 `adryfish/fingerprint-chromium` 的稳定版本，并按当前操作系统与架构选择资产。客户端不调用 GitHub Releases API，也不抓取 Release HTML。全新安装没有可用内核时，应用会显示版本、平台、架构、大小与来源，只有用户确认后才开始下载；不会在后台静默下载数百 MB 文件。手动导入和旧的 URL 下载入口继续保留。
+
+静态 Manifest 查询使用 ETag 缓存，读取顺序为远程 Manifest、上次成功缓存、安装包内置 Manifest。远程地址暂时不可用时会显示缓存并标记数据可能过期，已经安装的内核仍可正常启动。
+
+`.github/workflows/update-browser-core-manifest.yml` 每 6 小时运行一次，通过 GitHub Actions 的临时 Token 查询上游并发布到 `browser-core-index` 分支。Token 只存在于 Action 运行环境，不进入客户端、数据库、Manifest 或日志。也可在 Actions 页面手动触发该工作流。
+
+### 下载校验与安装安全
+
+如果 Release 提供 SHA-256 或 checksums 文件，安装前会匹配当前资产并验证；校验不一致会立即停止。发布者未提供独立校验值时，应用仍计算并保存本地 SHA-256，但 UI 会明确标记这不能证明发布来源真实性。
+
+归档先下载到 `download-cache/browser-core/*.part`，再解压到 `chrome/.staging/<task-id>`。安装过程拒绝路径穿越、符号链接和硬链接，并限制文件数量与解压总尺寸；只有可执行文件和架构验证通过后才原子移动到正式目录并注册数据库。失败或取消不会注册残缺内核。
+
+### macOS Gatekeeper
+
+Ant Browser 不会自动删除 `com.apple.quarantine`，也不会绕过 Gatekeeper。unsigned 内核或应用被拦截时，请先确认 Release 来源与 SHA-256，然后在 Finder 中右键选择“打开”，或前往“系统设置 → 隐私与安全性”查看系统提供的主动放行入口。只有在理解风险并确认文件来源后，才应由用户自行执行系统管理操作。
+
+### 更新、回滚与 Provider 扩展
+
+应用启动后延迟检查更新，每 24 小时最多一次。新版本采用并行目录安装，不覆盖正在使用的版本；安装成功后只影响之后启动的实例，用户可保留旧默认版本、切换默认版本或回滚。应用管理版本默认保留最近两个，手动导入版本不会被自动清理。
+
+Release 逻辑位于 `backend/internal/browsercore`，默认使用 `StaticManifestProvider`，并通过 `Provider` 接口隔离版本列表、兼容资产选择、下载元数据、版本解析和指纹能力。Manifest 生成脚本位于 `tools/browsercore/update_manifest.py`。新增其他内核仓库时应实现 Provider 或生成相同 schema 的静态 Manifest，不要把仓库特定逻辑写入前端。
+
 Ant Browser 的目标很明确：在一台桌面设备上，帮助用户稳定管理多个彼此隔离的浏览器实例，并配合代理池、浏览器内核和快捷启动能力完成日常运营或测试工作。
 
 ## 目录

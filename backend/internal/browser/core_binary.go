@@ -9,7 +9,11 @@ import (
 
 // CoreExecutableCandidates 返回当前平台可接受的浏览器可执行文件候选名。
 func CoreExecutableCandidates() []string {
-	switch goruntime.GOOS {
+	return coreExecutableCandidatesFor(goruntime.GOOS)
+}
+
+func coreExecutableCandidatesFor(goos string) []string {
+	switch goos {
 	case "windows":
 		return []string{"chrome.exe"}
 	case "linux":
@@ -23,6 +27,33 @@ func CoreExecutableCandidates() []string {
 	default:
 		return []string{"chrome"}
 	}
+}
+
+func findCoreExecutableForPlatform(baseDir, goos string) (string, string, bool) {
+	candidates := coreExecutableCandidatesFor(goos)
+	for _, candidate := range candidates {
+		path := filepath.Join(baseDir, filepath.FromSlash(candidate))
+		if _, err := os.Stat(path); err == nil {
+			return path, candidate, true
+		}
+	}
+	names := make(map[string]string)
+	for _, candidate := range candidates {
+		names[strings.ToLower(filepath.Base(candidate))] = candidate
+	}
+	var foundPath, foundCandidate string
+	_ = filepath.WalkDir(baseDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry == nil || entry.IsDir() || foundPath != "" {
+			return nil
+		}
+		if candidate, ok := names[strings.ToLower(entry.Name())]; ok {
+			if goos != "darwin" || strings.Contains(filepath.ToSlash(path), ".app/Contents/MacOS/") || !strings.Contains(candidate, ".app/") {
+				foundPath, foundCandidate = path, candidate
+			}
+		}
+		return nil
+	})
+	return foundPath, foundCandidate, foundPath != ""
 }
 
 func CoreExecutablePlatform() string {

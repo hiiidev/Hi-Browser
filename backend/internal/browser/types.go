@@ -3,6 +3,8 @@ package browser
 import (
 	"ant-chrome/backend/internal/apppath"
 	"ant-chrome/backend/internal/config"
+	"context"
+	"net/http"
 	"os/exec"
 	"sync"
 )
@@ -85,6 +87,7 @@ type CoreInput struct {
 	CoreName  string `json:"coreName"`
 	CorePath  string `json:"corePath"`
 	IsDefault bool   `json:"isDefault"`
+	Metadata  *Core  `json:"metadata,omitempty"`
 }
 
 // CoreValidateResult 内核路径验证结果
@@ -146,12 +149,25 @@ type Manager struct {
 	CodeProvider     CodeProvider
 
 	// DAO 层（注入后使用 SQLite 存储，未注入时降级到 config.yaml）
-	ProfileDAO   ProfileDAO
-	ProxyDAO     ProxyDAO
-	CoreDAO      CoreDAO
-	BookmarkDAO  BookmarkDAO
-	GroupDAO     GroupDAO
-	ExtensionDAO ExtensionDAO
+	ProfileDAO     ProfileDAO
+	ProxyDAO       ProxyDAO
+	CoreDAO        CoreDAO
+	BookmarkDAO    BookmarkDAO
+	GroupDAO       GroupDAO
+	ExtensionDAO   ExtensionDAO
+	DownloadMutex  sync.Mutex
+	DownloadTasks  map[string]*downloadTask
+	DownloadAssets map[string]string
+}
+
+type downloadTask struct {
+	State           DownloadTaskState
+	Cancel          context.CancelFunc
+	URL             string
+	ProxyConfig     string
+	CoreInput       CoreInput
+	ReplaceExisting bool
+	Client          *http.Client
 }
 
 // XrayBridge Xray 桥接进程
@@ -172,6 +188,8 @@ func NewManager(cfg *config.Config, appRoot string) *Manager {
 		Profiles:         make(map[string]*Profile),
 		BrowserProcesses: make(map[string]*exec.Cmd),
 		XrayBridges:      make(map[string]*XrayBridge),
+		DownloadTasks:    make(map[string]*downloadTask),
+		DownloadAssets:   make(map[string]string),
 	}
 }
 

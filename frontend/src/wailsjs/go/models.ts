@@ -387,6 +387,89 @@ export namespace backend {
 	        this.failedList = source["failedList"];
 	    }
 	}
+	export class BrowserCoreReleaseInfo {
+	    provider: string;
+	    version: string;
+	    releaseTag: string;
+	    publishedAt: string;
+	    releaseUrl: string;
+	    notes: string;
+	    asset: browsercore.Asset;
+	    stale: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new BrowserCoreReleaseInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.version = source["version"];
+	        this.releaseTag = source["releaseTag"];
+	        this.publishedAt = source["publishedAt"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.notes = source["notes"];
+	        this.asset = this.convertValues(source["asset"], browsercore.Asset);
+	        this.stale = source["stale"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BrowserCorePreparationStatus {
+	    hasValidCore: boolean;
+	    platform: string;
+	    architecture: string;
+	    recommended?: BrowserCoreReleaseInfo;
+	    message: string;
+
+	    static createFrom(source: any = {}) {
+	        return new BrowserCorePreparationStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasValidCore = source["hasValidCore"];
+	        this.platform = source["platform"];
+	        this.architecture = source["architecture"];
+	        this.recommended = this.convertValues(source["recommended"], BrowserCoreReleaseInfo);
+	        this.message = source["message"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class BrowserExtensionManualDownloadFile {
 	    fileName: string;
 	    filePath: string;
@@ -992,6 +1075,7 @@ export namespace browser {
 	    coreName: string;
 	    corePath: string;
 	    isDefault: boolean;
+	    metadata?: config.BrowserCore;
 	
 	    static createFrom(source: any = {}) {
 	        return new CoreInput(source);
@@ -1003,7 +1087,26 @@ export namespace browser {
 	        this.coreName = source["coreName"];
 	        this.corePath = source["corePath"];
 	        this.isDefault = source["isDefault"];
+	        this.metadata = this.convertValues(source["metadata"], config.BrowserCore);
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class CoreValidateResult {
 	    valid: boolean;
@@ -1017,6 +1120,46 @@ export namespace browser {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.valid = source["valid"];
 	        this.message = source["message"];
+	    }
+	}
+	export class DownloadTaskState {
+	    taskId: string;
+	    phase: string;
+	    version: string;
+	    assetName: string;
+	    downloadedBytes: number;
+	    totalBytes: number;
+	    progress: number;
+	    speedBytesPerSecond: number;
+	    estimatedSeconds: number;
+	    message: string;
+	    errorCode: string;
+	    errorDetail: string;
+	    canRetry: boolean;
+	    createdAt: string;
+	    updatedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DownloadTaskState(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taskId = source["taskId"];
+	        this.phase = source["phase"];
+	        this.version = source["version"];
+	        this.assetName = source["assetName"];
+	        this.downloadedBytes = source["downloadedBytes"];
+	        this.totalBytes = source["totalBytes"];
+	        this.progress = source["progress"];
+	        this.speedBytesPerSecond = source["speedBytesPerSecond"];
+	        this.estimatedSeconds = source["estimatedSeconds"];
+	        this.message = source["message"];
+	        this.errorCode = source["errorCode"];
+	        this.errorDetail = source["errorDetail"];
+	        this.canRetry = source["canRetry"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	export class Extension {
@@ -1312,6 +1455,43 @@ export namespace browser {
 
 }
 
+export namespace browsercore {
+
+	export class Asset {
+	    id: number;
+	    name: string;
+	    size: number;
+	    downloadUrl: string;
+	    contentType: string;
+	    platform?: string;
+	    architecture?: string;
+	    publisherSha256?: string;
+	    checksumAssetId?: number;
+	    checksumAssetName?: string;
+	    checksumDownloadUrl?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Asset(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.size = source["size"];
+	        this.downloadUrl = source["downloadUrl"];
+	        this.contentType = source["contentType"];
+	        this.platform = source["platform"];
+	        this.architecture = source["architecture"];
+	        this.publisherSha256 = source["publisherSha256"];
+	        this.checksumAssetId = source["checksumAssetId"];
+	        this.checksumAssetName = source["checksumAssetName"];
+	        this.checksumDownloadUrl = source["checksumDownloadUrl"];
+	    }
+	}
+
+}
+
 export namespace config {
 	
 	export class BrowserBookmark {
@@ -1335,6 +1515,25 @@ export namespace config {
 	    coreName: string;
 	    corePath: string;
 	    isDefault: boolean;
+	    provider: string;
+	    sourceRepository: string;
+	    releaseTag: string;
+	    browserVersion: string;
+	    chromiumMajor: number;
+	    assetId: number;
+	    assetName: string;
+	    platform: string;
+	    architecture: string;
+	    archiveSha256: string;
+	    executablePath: string;
+	    installedAt: string;
+	    lastVerifiedAt: string;
+	    verificationStatus: string;
+	    installationStatus: string;
+	    managedByApp: boolean;
+	    releaseUrl: string;
+	    capabilitiesJson: string;
+	    archiveSize: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new BrowserCore(source);
@@ -1346,6 +1545,55 @@ export namespace config {
 	        this.coreName = source["coreName"];
 	        this.corePath = source["corePath"];
 	        this.isDefault = source["isDefault"];
+	        this.provider = source["provider"];
+	        this.sourceRepository = source["sourceRepository"];
+	        this.releaseTag = source["releaseTag"];
+	        this.browserVersion = source["browserVersion"];
+	        this.chromiumMajor = source["chromiumMajor"];
+	        this.assetId = source["assetId"];
+	        this.assetName = source["assetName"];
+	        this.platform = source["platform"];
+	        this.architecture = source["architecture"];
+	        this.archiveSha256 = source["archiveSha256"];
+	        this.executablePath = source["executablePath"];
+	        this.installedAt = source["installedAt"];
+	        this.lastVerifiedAt = source["lastVerifiedAt"];
+	        this.verificationStatus = source["verificationStatus"];
+	        this.installationStatus = source["installationStatus"];
+	        this.managedByApp = source["managedByApp"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.capabilitiesJson = source["capabilitiesJson"];
+	        this.archiveSize = source["archiveSize"];
+	    }
+	}
+	export class BrowserCoreConfig {
+	    provider: string;
+	    channel: string;
+	    manifestUrl: string;
+	    autoCheckUpdates?: boolean;
+	    autoInstallWhenMissing?: boolean;
+	    autoInstallRecommended: boolean;
+	    keepVersions: number;
+	    downloadProxyMode: string;
+	    skippedVersion: string;
+	    lastUpdateCheckAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new BrowserCoreConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.channel = source["channel"];
+	        this.manifestUrl = source["manifestUrl"];
+	        this.autoCheckUpdates = source["autoCheckUpdates"];
+	        this.autoInstallWhenMissing = source["autoInstallWhenMissing"];
+	        this.autoInstallRecommended = source["autoInstallRecommended"];
+	        this.keepVersions = source["keepVersions"];
+	        this.downloadProxyMode = source["downloadProxyMode"];
+	        this.skippedVersion = source["skippedVersion"];
+	        this.lastUpdateCheckAt = source["lastUpdateCheckAt"];
 	    }
 	}
 	export class BrowserProxy {

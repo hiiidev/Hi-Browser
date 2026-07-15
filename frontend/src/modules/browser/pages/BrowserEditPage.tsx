@@ -400,6 +400,7 @@ export function BrowserEditPage() {
         <FingerprintPanel
           value={formData.fingerprintArgs}
           onChange={args => handleChange('fingerprintArgs', args)}
+			  chromiumMajor={cores.find(core => core.coreId === formData.coreId)?.chromiumMajor || 0}
         />
       </Card>
 

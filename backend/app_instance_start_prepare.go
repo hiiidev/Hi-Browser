@@ -2,6 +2,7 @@ package backend
 
 import (
 	"ant-chrome/backend/internal/browser"
+	"ant-chrome/backend/internal/browsercore"
 	"ant-chrome/backend/internal/logger"
 	"fmt"
 	"os"
@@ -163,7 +164,7 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 		chromeBinaryPath:     chromeBinaryPath,
 		userDataDir:          userDataDir,
 		extensionDirs:        extensionDirs,
-		args:                 buildBrowserLaunchArgs(profile, userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
+		args:                 buildBrowserLaunchArgs(profile, a.browserChromiumMajor(profile), userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
 		deferredStartTargets: deferredStartTargets,
 		effectiveProxy:       effectiveProxy,
 		acquiredProxyBridge:  acquiredProxyBridge,
@@ -272,7 +273,7 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 	return sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, chromeBinaryPath, userDataDir, nil
 }
 
-func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPort int, effectiveProxy string, extensionDirs []string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string) []string {
+func buildBrowserLaunchArgs(profile *BrowserProfile, chromiumMajor int, userDataDir string, debugPort int, effectiveProxy string, extensionDirs []string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string) []string {
 	args := []string{
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 		fmt.Sprintf("--remote-debugging-port=%d", debugPort),
@@ -308,8 +309,31 @@ func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPo
 		args = append(args, fmt.Sprintf("--load-extension=%s", extensionArg))
 	}
 
-	args = append(args, profile.FingerprintArgs...)
+	normalizedFingerprint := browsercore.NormalizeFingerprintArgs(profile.FingerprintArgs, chromiumMajor)
+	args = append(args, normalizedFingerprint.Args...)
 	args = append(args, sanitizedProfileLaunchArgs...)
 	args = append(args, sanitizedExtraLaunchArgs...)
 	return browser.BuildLaunchArgs(args, launchTargets)
+}
+
+func (a *App) browserChromiumMajor(profile *BrowserProfile) int {
+	if a == nil || a.browserMgr == nil || profile == nil {
+		return 0
+	}
+	coreID := strings.TrimSpace(profile.CoreId)
+	var selected *BrowserCore
+	for _, core := range a.browserMgr.ListCores() {
+		candidate := core
+		if (coreID != "" && strings.EqualFold(core.CoreId, coreID)) || (coreID == "" && core.IsDefault) {
+			selected = &candidate
+			break
+		}
+	}
+	if selected == nil {
+		return 0
+	}
+	if selected.ChromiumMajor > 0 {
+		return selected.ChromiumMajor
+	}
+	return browsercore.ChromiumMajor(a.browserMgr.GetChromeVersion(selected.CorePath))
 }

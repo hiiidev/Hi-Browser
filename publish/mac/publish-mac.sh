@@ -125,6 +125,7 @@ SINGBOX_SRC="$RUNTIME_DIR/sing-box"
 APP_BIN_DIR="$ROOT_DIR/build/bin"
 CHROME_README_SRC="$ROOT_DIR/chrome/README.md"
 CONFIG_INIT_SRC="$ROOT_DIR/publish/config.init.mac.yaml"
+CORE_MANIFEST_SRC="$ROOT_DIR/browser-core-manifest.json"
 ZIP_NAME="AntBrowser-${VERSION}-macos-${ARCH}.zip"
 APP_EXPORT="$OUTPUT_DIR/AntBrowser-${VERSION}-macos-${ARCH}.app"
 STAGE_DIR="$STAGING_ROOT/$TARGET"
@@ -186,6 +187,10 @@ if [[ ! -f "$CONFIG_INIT_SRC" ]]; then
   echo "[ERROR] mac config template missing: $CONFIG_INIT_SRC" >&2
   exit 1
 fi
+if [[ ! -f "$CORE_MANIFEST_SRC" ]]; then
+  echo "[ERROR] browser core manifest missing: $CORE_MANIFEST_SRC" >&2
+  exit 1
+fi
 
 if [[ "$SKIP_RUNTIME_VERIFY" -ne 1 ]]; then
   if manifest_has_target >/dev/null 2>&1; then
@@ -234,6 +239,7 @@ mkdir -p "$APP_MACOS_DIR/bin"
 cp "$XRAY_SRC" "$APP_MACOS_DIR/bin/xray"
 cp "$SINGBOX_SRC" "$APP_MACOS_DIR/bin/sing-box"
 cp "$CONFIG_INIT_SRC" "$APP_MACOS_DIR/config.yaml"
+cp "$CORE_MANIFEST_SRC" "$APP_MACOS_DIR/browser-core-manifest.json"
 chmod +x "$APP_MACOS_DIR/bin/xray" "$APP_MACOS_DIR/bin/sing-box"
 
 if [[ -f "$CHROME_README_SRC" ]]; then

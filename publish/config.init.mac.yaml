@@ -38,7 +38,7 @@ browser:
   user_data_root: data
   default_fingerprint_args:
     - --fingerprint-brand=Chrome
-    - --fingerprint-platform=mac
+    - --fingerprint-platform=macos
   default_launch_args:
     - --disable-sync
     - --no-first-run
@@ -46,6 +46,15 @@ browser:
   cores: []
   proxies: []
   profiles: []
+browser_core:
+  provider: fingerprint-chromium-static
+  channel: stable
+  manifest_url: https://raw.githubusercontent.com/hiiidev/Hi-Browser/browser-core-index/browser-core-manifest.json
+  auto_check_updates: true
+  auto_install_when_missing: true
+  auto_install_recommended: false
+  keep_versions: 2
+  download_proxy_mode: system
 launch_server:
   port: 19876
 automation:

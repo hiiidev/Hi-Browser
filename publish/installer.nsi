@@ -210,6 +210,9 @@ Section "Ant Browser (required)" SecMain
 !else
   !echo "Warning: ${STAGINGDIR}\\config.yaml not found, installer will use runtime defaults."
 !endif
+!if /FileExists "${STAGINGDIR}\browser-core-manifest.json"
+  File "${STAGINGDIR}\browser-core-manifest.json"
+!endif
 !if /FileExists "${STAGINGDIR}\chrome\*"
   SetOutPath "$INSTDIR\chrome"
   File /r "${STAGINGDIR}\chrome\*"
@@ -253,6 +256,7 @@ Section "Uninstall"
   Delete /REBOOTOK "$INSTDIR\${PRODUCT_EXE}"
   Delete /REBOOTOK "$INSTDIR\${PRODUCT_ICON}"
   Delete /REBOOTOK "$INSTDIR\config.yaml"
+  Delete /REBOOTOK "$INSTDIR\browser-core-manifest.json"
   Delete /REBOOTOK "$INSTDIR\proxies.yaml"
   Delete /REBOOTOK "$INSTDIR\Uninstall.exe"
   RMDir /r /REBOOTOK "$INSTDIR\bin"

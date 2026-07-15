@@ -36,9 +36,7 @@ logging:
             - secret
 browser:
     user_data_root: data
-    default_fingerprint_args:
-        - --fingerprint-brand=Chrome
-        - --fingerprint-platform=windows
+    default_fingerprint_args: []
     default_launch_args:
         - --disable-sync
         - --no-first-run
@@ -48,6 +46,15 @@ browser:
     start_ready_timeout_ms: 3000
     start_stable_window_ms: 1200
     default_connector_type: xray
+browser_core:
+    provider: fingerprint-chromium-static
+    channel: stable
+    manifest_url: https://raw.githubusercontent.com/hiiidev/Hi-Browser/browser-core-index/browser-core-manifest.json
+    auto_check_updates: true
+    auto_install_when_missing: true
+    auto_install_recommended: false
+    keep_versions: 2
+    download_proxy_mode: system
 proxy_check:
     bridge_start_timeout_ms: 15000
     speed_target_id: ""

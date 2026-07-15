@@ -146,12 +146,24 @@ export function BrowserClearCookies(arg1) {
   return window['go']['main']['App']['BrowserClearCookies'](arg1);
 }
 
+export function BrowserCoreAvailableReleases() {
+  return window['go']['main']['App']['BrowserCoreAvailableReleases']();
+}
+
+export function BrowserCoreCancelDownload(arg1) {
+  return window['go']['main']['App']['BrowserCoreCancelDownload'](arg1);
+}
+
 export function BrowserCoreDelete(arg1) {
   return window['go']['main']['App']['BrowserCoreDelete'](arg1);
 }
 
 export function BrowserCoreDownload(arg1, arg2, arg3) {
   return window['go']['main']['App']['BrowserCoreDownload'](arg1, arg2, arg3);
+}
+
+export function BrowserCoreDownloadTask(arg1) {
+  return window['go']['main']['App']['BrowserCoreDownloadTask'](arg1);
 }
 
 export function BrowserCoreExtendedInfo() {
@@ -162,12 +174,28 @@ export function BrowserCoreImportLocal() {
   return window['go']['main']['App']['BrowserCoreImportLocal']();
 }
 
+export function BrowserCoreImportLocalDirectory() {
+  return window['go']['main']['App']['BrowserCoreImportLocalDirectory']();
+}
+
+export function BrowserCoreInstallRelease(arg1, arg2) {
+  return window['go']['main']['App']['BrowserCoreInstallRelease'](arg1, arg2);
+}
+
 export function BrowserCoreList() {
   return window['go']['main']['App']['BrowserCoreList']();
 }
 
+export function BrowserCorePreparation() {
+  return window['go']['main']['App']['BrowserCorePreparation']();
+}
+
 export function BrowserCoreRedownload(arg1, arg2, arg3) {
   return window['go']['main']['App']['BrowserCoreRedownload'](arg1, arg2, arg3);
+}
+
+export function BrowserCoreRetryDownload(arg1) {
+  return window['go']['main']['App']['BrowserCoreRetryDownload'](arg1);
 }
 
 export function BrowserCoreSave(arg1) {
@@ -184,6 +212,10 @@ export function BrowserCoreSetDefault(arg1) {
 
 export function BrowserCoreValidate(arg1) {
   return window['go']['main']['App']['BrowserCoreValidate'](arg1);
+}
+
+export function BrowserCoreVerify(arg1) {
+  return window['go']['main']['App']['BrowserCoreVerify'](arg1);
 }
 
 export function BrowserExportCookies(arg1) {
@@ -506,6 +538,10 @@ export function GetAutomationState() {
   return window['go']['main']['App']['GetAutomationState']();
 }
 
+export function GetBrowserCoreSettings() {
+  return window['go']['main']['App']['GetBrowserCoreSettings']();
+}
+
 export function GetBrowserSettings() {
   return window['go']['main']['App']['GetBrowserSettings']();
 }
@@ -580,6 +616,10 @@ export function SaveAutomationScriptPackageSettings(arg1) {
 
 export function SaveAutomationSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveAutomationSettings'](arg1, arg2);
+}
+
+export function SaveBrowserCoreSettings(arg1) {
+  return window['go']['main']['App']['SaveBrowserCoreSettings'](arg1);
 }
 
 export function SaveBrowserProxies(arg1) {

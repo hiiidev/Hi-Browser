@@ -1,4 +1,4 @@
-import type { BrowserCore, BrowserCoreExtended, BrowserCoreInput, BrowserCoreValidateResult } from '../types'
+import type { BrowserCore, BrowserCoreDownloadTask, BrowserCoreExtended, BrowserCoreInput, BrowserCoreRelease, BrowserCoreSettings, BrowserCoreValidateResult } from '../types'
 import { getBindings, getMockCores, setMockCores } from './runtime'
 
 export async function fetchBrowserCores(): Promise<BrowserCore[]> {
@@ -54,6 +54,7 @@ export async function validateBrowserCorePath(corePath: string): Promise<Browser
   }
   return { valid: true, message: '路径有效（模拟）' }
 }
+export async function verifyBrowserCore(coreId:string):Promise<BrowserCoreValidateResult>{const bindings:any=await getBindings();return bindings?.BrowserCoreVerify ? await bindings.BrowserCoreVerify(coreId) : {valid:false,message:'当前后端不支持完整性检查'}}
 
 export async function fetchCoreExtendedInfo(): Promise<BrowserCoreExtended[]> {
   const bindings: any = await getBindings()
@@ -87,6 +88,14 @@ export async function BrowserCoreDownload(coreName: string, url: string, proxyCo
   }
   return true
 }
+
+export async function fetchBrowserCoreReleases(): Promise<BrowserCoreRelease[]> { const bindings:any=await getBindings(); return bindings?.BrowserCoreAvailableReleases ? ((await bindings.BrowserCoreAvailableReleases()) || []) : [] }
+export async function installBrowserCoreRelease(releaseTag:string,proxyConfig=''):Promise<string>{const bindings:any=await getBindings();if(!bindings?.BrowserCoreInstallRelease)throw new Error('当前后端不支持自动安装');return await bindings.BrowserCoreInstallRelease(releaseTag,proxyConfig)}
+export async function cancelBrowserCoreDownload(taskId:string):Promise<void>{const bindings:any=await getBindings();if(bindings?.BrowserCoreCancelDownload)await bindings.BrowserCoreCancelDownload(taskId)}
+export async function retryBrowserCoreDownload(taskId:string):Promise<string>{const bindings:any=await getBindings();if(!bindings?.BrowserCoreRetryDownload)throw new Error('当前后端不支持重试');return await bindings.BrowserCoreRetryDownload(taskId)}
+export async function fetchBrowserCoreDownloadTask(taskId:string):Promise<BrowserCoreDownloadTask>{const bindings:any=await getBindings();if(!bindings?.BrowserCoreDownloadTask)throw new Error('当前后端不支持任务查询');return await bindings.BrowserCoreDownloadTask(taskId)}
+export async function fetchBrowserCoreSettings():Promise<BrowserCoreSettings>{const bindings:any=await getBindings();return bindings?.GetBrowserCoreSettings ? await bindings.GetBrowserCoreSettings() : {provider:'fingerprint-chromium-static',channel:'stable',manifestUrl:'https://raw.githubusercontent.com/hiiidev/Hi-Browser/browser-core-index/browser-core-manifest.json',autoCheckUpdates:true,autoInstallWhenMissing:true,autoInstallRecommended:false,keepVersions:2,downloadProxyMode:'system',skippedVersion:'',lastUpdateCheckAt:''}}
+export async function saveBrowserCoreSettings(settings:BrowserCoreSettings):Promise<void>{const bindings:any=await getBindings();if(bindings?.SaveBrowserCoreSettings)await bindings.SaveBrowserCoreSettings(settings)}
 
 export async function redownloadBrowserCore(coreId: string, url: string, proxyConfig?: string): Promise<boolean> {
   const bindings: any = await getBindings()

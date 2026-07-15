@@ -149,6 +149,24 @@ func normalizeConfig(config *Config) {
 	if config.Browser.Profiles == nil {
 		config.Browser.Profiles = []BrowserProfileConfig{}
 	}
+	if strings.TrimSpace(config.BrowserCore.Provider) == "" || strings.EqualFold(strings.TrimSpace(config.BrowserCore.Provider), "fingerprint-chromium") {
+		config.BrowserCore.Provider = defaultConfig.BrowserCore.Provider
+	}
+	if strings.TrimSpace(config.BrowserCore.Channel) == "" {
+		config.BrowserCore.Channel = defaultConfig.BrowserCore.Channel
+	}
+	if strings.TrimSpace(config.BrowserCore.ManifestURL) == "" {
+		config.BrowserCore.ManifestURL = defaultConfig.BrowserCore.ManifestURL
+	}
+	if config.BrowserCore.AutoCheckUpdates == nil {
+		config.BrowserCore.AutoCheckUpdates = defaultConfig.BrowserCore.AutoCheckUpdates
+	}
+	if config.BrowserCore.AutoInstallWhenMissing == nil {
+		config.BrowserCore.AutoInstallWhenMissing = defaultConfig.BrowserCore.AutoInstallWhenMissing
+	}
+	if config.BrowserCore.KeepVersions <= 0 {
+		config.BrowserCore.KeepVersions = defaultConfig.BrowserCore.KeepVersions
+	}
 	if config.ProxyCheck.BridgeStartTimeoutMs <= 0 {
 		config.ProxyCheck.BridgeStartTimeoutMs = defaultConfig.ProxyCheck.BridgeStartTimeoutMs
 	}
@@ -264,6 +282,15 @@ func DefaultConfig() *Config {
 			StartStableWindowMs:    1200,
 			DefaultConnectorType:   BrowserConnectorXray,
 		},
+		BrowserCore: BrowserCoreConfig{
+			Provider:               "fingerprint-chromium-static",
+			Channel:                "stable",
+			ManifestURL:            "https://raw.githubusercontent.com/hiiidev/Hi-Browser/browser-core-index/browser-core-manifest.json",
+			AutoCheckUpdates:       boolPtr(true),
+			AutoInstallWhenMissing: boolPtr(true),
+			KeepVersions:           2,
+			DownloadProxyMode:      "system",
+		},
 		ProxyCheck: ProxyCheckConfig{
 			BridgeStartTimeoutMs: 15000,
 			SpeedTargetID:        "",
@@ -320,7 +347,7 @@ func defaultFingerprintArgsForOS(goos string) []string {
 	platform := "windows"
 	switch strings.ToLower(strings.TrimSpace(goos)) {
 	case "darwin":
-		platform = "mac"
+		platform = "macos"
 	case "linux":
 		platform = "linux"
 	}

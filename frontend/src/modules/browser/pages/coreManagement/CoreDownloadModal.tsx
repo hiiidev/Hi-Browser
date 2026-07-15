@@ -13,6 +13,8 @@ interface CoreDownloadModalProps {
   setProgress: Dispatch<SetStateAction<CoreDownloadProgress | null>>
   onClose: () => void
   onStart: () => void
+	onCancelTask?: () => void
+	onRetry?: () => void
 }
 
 export function CoreDownloadModal({
@@ -24,8 +26,11 @@ export function CoreDownloadModal({
   setProgress,
   onClose,
   onStart,
+	onCancelTask,
+	onRetry,
 }: CoreDownloadModalProps) {
-  const downloading = progress !== null && progress.phase !== 'error'
+	const terminal = progress?.phase === 'error' || progress?.phase === 'failed' || progress?.phase === 'done' || progress?.phase === 'completed' || progress?.phase === 'cancelled'
+	const downloading = progress !== null && !terminal
   const isRedownload = form.mode === 'redownload'
 
   const handleClose = () => {
@@ -45,8 +50,10 @@ export function CoreDownloadModal({
       width="480px"
       footer={
         <>
-          <Button variant="secondary" onClick={handleClose} disabled={downloading}>取消</Button>
-          <Button onClick={onStart} loading={downloading}>{isRedownload ? '开始重新下载' : '开始下载'}</Button>
+			<Button variant="secondary" onClick={downloading && onCancelTask ? onCancelTask : handleClose}>{downloading ? '取消任务' : '关闭'}</Button>
+			{progress?.canRetry && onRetry
+			  ? <Button onClick={onRetry}>重试</Button>
+			  : <Button onClick={onStart} loading={downloading} disabled={Boolean(progress) && !terminal}>{isRedownload ? '开始重新下载' : '开始下载'}</Button>}
         </>
       }
     >
@@ -136,8 +143,10 @@ export function CoreDownloadModal({
                 className="bg-[var(--color-accent)] h-2 rounded-full transition-all duration-300"
                 style={{ width: `${Math.max(0, Math.min(100, progress.progress))}%` }}
               />
-            </div>
-          </div>
+			</div>
+			{Boolean(progress.totalBytes) && <div className="mt-2 text-xs text-[var(--color-text-muted)]">{(Number(progress.downloadedBytes || 0) / 1048576).toFixed(1)} / {(Number(progress.totalBytes || 0) / 1048576).toFixed(1)} MB · {(Number(progress.speedBytesPerSecond || 0) / 1048576).toFixed(1)} MB/s</div>}
+			{progress.errorDetail && <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap text-xs text-[var(--color-danger)]">{progress.errorDetail}</pre>}
+		</div>
         )}
       </div>
     </Modal>

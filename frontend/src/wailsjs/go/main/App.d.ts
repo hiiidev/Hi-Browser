@@ -82,17 +82,31 @@ export function BookmarkSyncToProfiles():Promise<backend.BookmarkSyncResult>;
 
 export function BrowserClearCookies(arg1:string):Promise<void>;
 
+export function BrowserCoreAvailableReleases():Promise<Array<backend.BrowserCoreReleaseInfo>>;
+
+export function BrowserCoreCancelDownload(arg1:string):Promise<void>;
+
 export function BrowserCoreDelete(arg1:string):Promise<void>;
 
 export function BrowserCoreDownload(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function BrowserCoreDownloadTask(arg1:string):Promise<browser.DownloadTaskState>;
 
 export function BrowserCoreExtendedInfo():Promise<Array<browser.CoreExtendedInfo>>;
 
 export function BrowserCoreImportLocal():Promise<config.BrowserCore>;
 
+export function BrowserCoreImportLocalDirectory():Promise<config.BrowserCore>;
+
+export function BrowserCoreInstallRelease(arg1:string,arg2:string):Promise<string>;
+
 export function BrowserCoreList():Promise<Array<config.BrowserCore>>;
 
+export function BrowserCorePreparation():Promise<backend.BrowserCorePreparationStatus>;
+
 export function BrowserCoreRedownload(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function BrowserCoreRetryDownload(arg1:string):Promise<string>;
 
 export function BrowserCoreSave(arg1:browser.CoreInput):Promise<void>;
 
@@ -101,6 +115,8 @@ export function BrowserCoreScan():Promise<Array<config.BrowserCore>>;
 export function BrowserCoreSetDefault(arg1:string):Promise<void>;
 
 export function BrowserCoreValidate(arg1:string):Promise<browser.CoreValidateResult>;
+
+export function BrowserCoreVerify(arg1:string):Promise<browser.CoreValidateResult>;
 
 export function BrowserExportCookies(arg1:string):Promise<string>;
 
@@ -262,6 +278,8 @@ export function GetAppLogs():Promise<Array<logger.MemoryLogEntry>>;
 
 export function GetAutomationState():Promise<Record<string, any>>;
 
+export function GetBrowserCoreSettings():Promise<config.BrowserCoreConfig>;
+
 export function GetBrowserSettings():Promise<browser.Settings>;
 
 export function GetDashboardStats():Promise<Record<string, any>>;
@@ -299,6 +317,8 @@ export function SaveAutomationRuntimeSettings(arg1:string,arg2:string):Promise<R
 export function SaveAutomationScriptPackageSettings(arg1:boolean):Promise<Record<string, any>>;
 
 export function SaveAutomationSettings(arg1:boolean,arg2:boolean):Promise<Record<string, any>>;
+
+export function SaveBrowserCoreSettings(arg1:config.BrowserCoreConfig):Promise<void>;
 
 export function SaveBrowserProxies(arg1:Array<config.BrowserProxy>):Promise<void>;
 

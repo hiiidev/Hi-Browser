@@ -2,15 +2,41 @@ package backend
 
 import (
 	"ant-chrome/backend/internal/browser"
+	"ant-chrome/backend/internal/browsercore"
 	"ant-chrome/backend/internal/config"
 	"ant-chrome/backend/internal/logger"
+	proxyinternal "ant-chrome/backend/internal/proxy"
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	gort "runtime"
 	"strings"
+	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+type BrowserCoreReleaseInfo struct {
+	Provider    string            `json:"provider"`
+	Version     string            `json:"version"`
+	ReleaseTag  string            `json:"releaseTag"`
+	PublishedAt string            `json:"publishedAt"`
+	ReleaseURL  string            `json:"releaseUrl"`
+	Notes       string            `json:"notes"`
+	Asset       browsercore.Asset `json:"asset"`
+	Stale       bool              `json:"stale"`
+}
+
+type BrowserCorePreparationStatus struct {
+	HasValidCore bool                    `json:"hasValidCore"`
+	Platform     string                  `json:"platform"`
+	Architecture string                  `json:"architecture"`
+	Recommended  *BrowserCoreReleaseInfo `json:"recommended,omitempty"`
+	Message      string                  `json:"message"`
+}
 
 func (a *App) GetBrowserSettings() BrowserSettings {
 	return BrowserSettings{
@@ -61,6 +87,26 @@ func (a *App) BrowserCoreList() []BrowserCore {
 	return a.browserMgr.ListCores()
 }
 
+func (a *App) GetBrowserCoreSettings() config.BrowserCoreConfig { return a.config.BrowserCore }
+func (a *App) SaveBrowserCoreSettings(settings config.BrowserCoreConfig) error {
+	settings.Provider = browsercore.FingerprintChromiumStaticProvider
+	if strings.TrimSpace(settings.Channel) == "" {
+		settings.Channel = "stable"
+	}
+	settings.ManifestURL = strings.TrimSpace(settings.ManifestURL)
+	if settings.ManifestURL == "" {
+		settings.ManifestURL = config.DefaultConfig().BrowserCore.ManifestURL
+	}
+	if settings.KeepVersions < 1 {
+		settings.KeepVersions = 1
+	}
+	if settings.KeepVersions > 10 {
+		settings.KeepVersions = 10
+	}
+	a.config.BrowserCore = settings
+	return a.config.Save(a.resolveAppPath("config.yaml"))
+}
+
 func (a *App) BrowserCoreSave(input BrowserCoreInput) error {
 	return a.browserMgr.SaveCore(input)
 }
@@ -75,6 +121,10 @@ func (a *App) BrowserCoreSetDefault(coreId string) error {
 
 func (a *App) BrowserCoreValidate(corePath string) BrowserCoreValidateResult {
 	return a.browserMgr.ValidateCorePath(corePath)
+}
+
+func (a *App) BrowserCoreVerify(coreID string) BrowserCoreValidateResult {
+	return a.browserMgr.VerifyCore(coreID)
 }
 
 func (a *App) BrowserCoreExtendedInfo() []BrowserCoreExtendedInfo {
@@ -289,8 +339,114 @@ func (a *App) BrowserCoreDownload(coreName, url, proxyConfig string) error {
 	if a.ctx == nil {
 		return fmt.Errorf("app context is nil")
 	}
-	go a.browserMgr.DownloadAndExtractCore(a.ctx, coreName, url, proxyConfig)
-	return nil
+	client, err := a.browserCoreDownloadClient(proxyConfig)
+	if err != nil {
+		return err
+	}
+	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreName: coreName}, url, proxyConfig, false, client)
+	return err
+}
+
+func (a *App) BrowserCoreAvailableReleases() ([]BrowserCoreReleaseInfo, error) {
+	provider := a.browserCoreProvider()
+	list, err := provider.ListReleases(a.coreAPIContext(), browsercore.ListOptions{Channel: a.config.BrowserCore.Channel, Limit: 10})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]BrowserCoreReleaseInfo, 0, len(list.Releases))
+	for _, release := range list.Releases {
+		asset, selectErr := provider.SelectCompatibleAsset(release, gort.GOOS, gort.GOARCH)
+		if selectErr != nil {
+			continue
+		}
+		result = append(result, BrowserCoreReleaseInfo{Provider: provider.Name(), Version: provider.ParseVersion(release), ReleaseTag: release.TagName, PublishedAt: release.PublishedAt.Format(time.RFC3339), ReleaseURL: release.HTMLURL, Notes: releaseNotesSummary(release.Body), Asset: asset, Stale: list.Stale})
+	}
+	return result, nil
+}
+
+func (a *App) BrowserCoreInstallRelease(releaseTag, proxyConfig string) (string, error) {
+	provider := a.browserCoreProvider()
+	list, err := provider.ListReleases(a.coreAPIContext(), browsercore.ListOptions{Channel: a.config.BrowserCore.Channel, Limit: 10, Version: releaseTag})
+	if err != nil {
+		return "", err
+	}
+	if len(list.Releases) == 0 {
+		return "", fmt.Errorf("未找到版本 %s", releaseTag)
+	}
+	release := list.Releases[0]
+	asset, err := provider.SelectCompatibleAsset(release, gort.GOOS, gort.GOARCH)
+	if err != nil {
+		return "", err
+	}
+	version := provider.ParseVersion(release)
+	caps := provider.Capabilities(version, gort.GOOS, gort.GOOS)
+	capsJSON, _ := json.Marshal(caps)
+	coreName := fmt.Sprintf("fingerprint-chromium-%s-%s-%s", version, gort.GOOS, gort.GOARCH)
+	verificationStatus := "publisher-checksum-unavailable"
+	if checksum, found, checksumErr := provider.ResolvePublisherChecksum(a.coreAPIContext(), release, asset); checksumErr != nil {
+		return "", checksumErr
+	} else if found {
+		asset.PublisherSHA256 = checksum
+		verificationStatus = "publisher-sha256"
+	}
+	metadata := BrowserCore{Provider: provider.Name(), SourceRepository: "adryfish/fingerprint-chromium", ReleaseTag: release.TagName, BrowserVersion: version, ChromiumMajor: browsercore.ChromiumMajor(version), AssetId: asset.ID, AssetName: asset.Name, Platform: gort.GOOS, Architecture: gort.GOARCH, ManagedByApp: true, ReleaseUrl: release.HTMLURL, CapabilitiesJson: string(capsJSON), VerificationStatus: verificationStatus, ArchiveSha256: asset.PublisherSHA256}
+	client, clientErr := a.browserCoreDownloadClient(proxyConfig)
+	if clientErr != nil {
+		return "", clientErr
+	}
+	return a.browserMgr.StartDownloadTaskWithHTTPClient(a.coreAPIContext(), browser.CoreInput{CoreName: coreName, CorePath: filepath.ToSlash(filepath.Join("chrome", coreName)), IsDefault: len(a.browserMgr.ListCores()) == 0, Metadata: &metadata}, asset.DownloadURL, proxyConfig, false, client)
+}
+
+func (a *App) BrowserCoreDownloadTask(taskID string) (browser.DownloadTaskState, error) {
+	state, ok := a.browserMgr.GetDownloadTask(taskID)
+	if !ok {
+		return state, fmt.Errorf("下载任务不存在")
+	}
+	return state, nil
+}
+func (a *App) BrowserCoreCancelDownload(taskID string) error {
+	return a.browserMgr.CancelDownloadTask(taskID)
+}
+func (a *App) BrowserCoreRetryDownload(taskID string) (string, error) {
+	return a.browserMgr.RetryDownloadTask(a.coreAPIContext(), taskID)
+}
+
+func (a *App) BrowserCorePreparation() BrowserCorePreparationStatus {
+	status := BrowserCorePreparationStatus{Platform: gort.GOOS, Architecture: gort.GOARCH}
+	for _, core := range a.browserMgr.ListCores() {
+		if a.browserMgr.ValidateCorePath(core.CorePath).Valid {
+			status.HasValidCore = true
+			status.Message = "已检测到可用浏览器内核"
+			return status
+		}
+	}
+	status.Message = "未检测到可用内核，需要用户确认后安装"
+	if releases, err := a.BrowserCoreAvailableReleases(); err == nil && len(releases) > 0 {
+		status.Recommended = &releases[0]
+	}
+	return status
+}
+
+func (a *App) browserCoreProvider() browsercore.Provider {
+	manifestURL := ""
+	if a.config != nil {
+		manifestURL = strings.TrimSpace(a.config.BrowserCore.ManifestURL)
+	}
+	return browsercore.NewFingerprintChromiumStaticProvider(manifestURL, a.resolveAppPath("data/cache/browser-core/static-manifest.json"), filepath.Join(a.appRootAbs(), "browser-core-manifest.json"))
+}
+func (a *App) coreAPIContext() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
+}
+func releaseNotesSummary(value string) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	r := []rune(value)
+	if len(r) > 280 {
+		return string(r[:280]) + "..."
+	}
+	return value
 }
 
 // BrowserCoreRedownload 重新下载并替换指定内核目录
@@ -298,6 +454,23 @@ func (a *App) BrowserCoreRedownload(coreId, url, proxyConfig string) error {
 	if a.ctx == nil {
 		return fmt.Errorf("app context is nil")
 	}
-	go a.browserMgr.RedownloadCore(a.ctx, coreId, url, proxyConfig)
-	return nil
+	core, ok := a.browserMgr.GetCore(coreId)
+	if !ok {
+		return fmt.Errorf("内核不存在")
+	}
+	client, err := a.browserCoreDownloadClient(proxyConfig)
+	if err != nil {
+		return err
+	}
+	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreId: core.CoreId, CoreName: core.CoreName, CorePath: core.CorePath, IsDefault: core.IsDefault}, url, proxyConfig, true, client)
+	return err
+}
+
+func (a *App) browserCoreDownloadClient(proxyConfig string) (*http.Client, error) {
+	value := strings.TrimSpace(proxyConfig)
+	if value == "" || value == "__system__" || value == "__direct__" || value == "direct://" {
+		return nil, nil
+	}
+	connector := config.NormalizeBrowserConnectorType(a.config.Browser.DefaultConnectorType)
+	return proxyinternal.BuildProxyHTTPClient(value, "", a.getLatestProxies(), a.xrayMgr, a.singboxMgr, a.clashMgr, connector, 0)
 }

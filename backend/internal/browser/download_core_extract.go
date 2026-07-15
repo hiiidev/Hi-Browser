@@ -23,6 +23,11 @@ type archiveProgress struct {
 	total int
 }
 
+const (
+	maxCoreArchiveFiles         = 100000
+	maxCoreExtractedBytes int64 = 8 << 30
+)
+
 func SupportedCoreArchivePattern() string {
 	return "*.zip;*.tar;*.tar.gz;*.tgz;*.tar.xz;*.txz;*.tar.bz2;*.tbz2"
 }
@@ -51,7 +56,7 @@ func filepathFromURLPath(raw string) (string, error) {
 }
 
 func extractCoreArchiveAndStripRoot(archivePath, dest string, progressCb func(int, string)) error {
-	lower := strings.ToLower(archivePath)
+	lower := strings.TrimSuffix(strings.ToLower(archivePath), ".part")
 	if strings.HasSuffix(lower, ".zip") {
 		return extractZipArchiveAndStripRoot(archivePath, dest, progressCb)
 	}
@@ -78,8 +83,27 @@ func extractZipArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 	if len(reader.File) == 0 {
 		return fmt.Errorf("空的压缩包")
 	}
+	if len(reader.File) > maxCoreArchiveFiles {
+		return fmt.Errorf("压缩包文件数量超过安全限制 %d", maxCoreArchiveFiles)
+	}
+	var declaredBytes int64
+	for _, file := range reader.File {
+		if file.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("压缩包包含不允许的符号链接: %s", file.Name)
+		}
+		if file.UncompressedSize64 > uint64(maxCoreExtractedBytes) {
+			return fmt.Errorf("压缩包单文件尺寸超过安全限制: %s", file.Name)
+		}
+		declaredBytes += int64(file.UncompressedSize64)
+		if declaredBytes > maxCoreExtractedBytes {
+			return fmt.Errorf("压缩包解压总尺寸超过安全限制")
+		}
+	}
 	metas := make([]archiveEntryMeta, 0, len(reader.File))
 	for _, file := range reader.File {
+		if err := validateRawArchiveEntryName(file.Name); err != nil {
+			return err
+		}
 		metas = append(metas, archiveEntryMeta{Name: file.Name})
 	}
 	rootPrefix, hasCommonRoot := detectCommonArchiveRoot(metas)
@@ -137,6 +161,7 @@ func extractTarArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 
 	reader := tar.NewReader(stream)
 	entryCount := 0
+	var extractedBytes int64
 	topLevels := make(map[string]struct{})
 	for {
 		header, err := reader.Next()
@@ -146,7 +171,13 @@ func extractTarArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 		if err != nil {
 			return err
 		}
+		if err := validateRawArchiveEntryName(header.Name); err != nil {
+			return err
+		}
 		entryCount++
+		if entryCount > maxCoreArchiveFiles {
+			return fmt.Errorf("压缩包文件数量超过安全限制 %d", maxCoreArchiveFiles)
+		}
 		if entryCount == 1 || entryCount%50 == 0 {
 			progressCb(0, fmt.Sprintf("正在解压文件 %d...", entryCount))
 		}
@@ -166,15 +197,13 @@ func extractTarArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 			if err := os.MkdirAll(targetPath, header.FileInfo().Mode().Perm()); err != nil {
 				return err
 			}
-		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				return err
-			}
-			_ = os.Remove(targetPath)
-			if err := os.Symlink(header.Linkname, targetPath); err != nil {
-				return fmt.Errorf("创建符号链接失败 %s: %w", cleanName, err)
-			}
+		case tar.TypeSymlink, tar.TypeLink:
+			return fmt.Errorf("压缩包包含不允许的链接: %s", cleanName)
 		case tar.TypeReg, tar.TypeRegA:
+			if header.Size < 0 || header.Size > maxCoreExtractedBytes-extractedBytes {
+				return fmt.Errorf("压缩包解压总尺寸超过安全限制")
+			}
+			extractedBytes += header.Size
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				return err
 			}
@@ -312,8 +341,25 @@ func stripSingleExtractedRoot(dest string, topLevels map[string]struct{}) error 
 
 func normalizeArchiveEntryName(name string) string {
 	cleanName := filepath.ToSlash(strings.TrimSpace(name))
-	cleanName = strings.TrimPrefix(cleanName, "/")
+	if strings.HasPrefix(cleanName, "/") {
+		return "../__absolute_path_rejected__"
+	}
 	return filepath.ToSlash(filepath.Clean(cleanName))
+}
+
+func validateRawArchiveEntryName(name string) error {
+	normalized := filepath.ToSlash(strings.TrimSpace(name))
+	if normalized == "" {
+		return nil
+	}
+	if strings.HasPrefix(normalized, "/") || filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
+		return fmt.Errorf("非法文件路径: %s", name)
+	}
+	clean := filepath.ToSlash(filepath.Clean(normalized))
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return fmt.Errorf("非法文件路径: %s", name)
+	}
+	return nil
 }
 
 func safeArchiveTargetPath(dest, cleanName string) (string, error) {

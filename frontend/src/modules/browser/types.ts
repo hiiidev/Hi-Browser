@@ -117,6 +117,65 @@ export interface BrowserCore {
   coreName: string
   corePath: string
   isDefault: boolean
+	provider?: string
+	sourceRepository?: string
+	releaseTag?: string
+	browserVersion?: string
+	chromiumMajor?: number
+	assetId?: number
+	assetName?: string
+	platform?: string
+	architecture?: string
+	archiveSha256?: string
+	executablePath?: string
+	installedAt?: string
+	lastVerifiedAt?: string
+	verificationStatus?: string
+	installationStatus?: string
+	managedByApp?: boolean
+	releaseUrl?: string
+	capabilitiesJson?: string
+	archiveSize?: number
+}
+
+export interface BrowserCoreRelease {
+	provider: string
+	version: string
+	releaseTag: string
+	publishedAt: string
+	releaseUrl: string
+	notes: string
+	stale: boolean
+	asset: { id: number; name: string; size: number; downloadUrl: string; platform: string; architecture: string }
+}
+
+export interface BrowserCoreDownloadTask {
+	taskId: string
+	phase: string
+	version: string
+	assetName: string
+	downloadedBytes: number
+	totalBytes: number
+	progress: number
+	speedBytesPerSecond: number
+	estimatedSeconds: number
+	message: string
+	errorCode: string
+	errorDetail: string
+	canRetry: boolean
+}
+
+export interface BrowserCoreSettings {
+	provider: string
+	channel: string
+	manifestUrl: string
+	autoCheckUpdates: boolean
+	autoInstallWhenMissing: boolean
+	autoInstallRecommended: boolean
+	keepVersions: number
+	downloadProxyMode: string
+	skippedVersion: string
+	lastUpdateCheckAt: string
 }
 
 export interface BrowserCoreInput {
