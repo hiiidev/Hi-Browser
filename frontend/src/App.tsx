@@ -1,5 +1,5 @@
-import { Suspense, useEffect, useState } from "react";
-import { BrowserRouter as Router } from "react-router-dom";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { BrowserRouter as Router, useNavigate } from "react-router-dom";
 import { ThemeProvider } from "./shared/theme";
 import { Layout } from "./shared/layout";
 import { ToastContainer, Modal, Button, Loading, toast } from "./shared/components";
@@ -11,6 +11,8 @@ import { useBackupStore } from "./store/backupStore";
 import { installWailsOperationLogger } from "./utils/wailsOperationLogger";
 import {
   ForceQuit as ForceQuitApp,
+  BrowserCorePreparation,
+  GetBrowserCoreSettings,
   QuitAppOnly as QuitAppOnlyApp,
 } from "./wailsjs/go/main/App";
 import {
@@ -24,6 +26,37 @@ const QuickLaunchModal = lazyNamed(
   () => import("./modules/browser/components/QuickLaunchModal"),
   "QuickLaunchModal",
 );
+
+function BrowserCoreFirstRunGate() {
+  const navigate = useNavigate();
+  const checked = useRef(false);
+
+  useEffect(() => {
+    if (checked.current) return;
+    checked.current = true;
+
+    let cancelled = false;
+    Promise.all([BrowserCorePreparation(), GetBrowserCoreSettings()])
+      .then(([status, settings]) => {
+        if (
+          !cancelled &&
+          !status.hasValidCore &&
+          settings.autoInstallWhenMissing !== false
+        ) {
+          navigate("/browser/cores?prepare=1", { replace: true });
+        }
+      })
+      .catch(() => {
+        // 内核检查失败不影响已有功能和主界面启动。
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  return null;
+}
 
 function useWailsNotifications() {
   const addNotification = useNotificationStore((s) => s.addNotification);
@@ -316,6 +349,7 @@ function App() {
   return (
     <ThemeProvider>
       <Router>
+        <BrowserCoreFirstRunGate />
         <Layout>
           <Suspense fallback={routeFallback}>
             <AppRoutes />

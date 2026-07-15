@@ -33,6 +33,11 @@ export interface CoreEditForm {
 
 export interface CoreDownloadForm {
   coreId?: string
+	releaseTag?: string
+	assetName?: string
+	assetSize?: number
+	platform?: string
+	architecture?: string
   name: string
   url: string
   proxyMode: string

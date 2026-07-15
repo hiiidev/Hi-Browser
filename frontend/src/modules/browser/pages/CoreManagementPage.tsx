@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useCallback } from 'react'
 import { Download, FolderOpen } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { Badge, Button, Card, ConfirmModal, Input, Switch, Table, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { BrowserCore, BrowserCoreInput, BrowserCoreValidateResult, BrowserSettings, BrowserCoreExtended, BrowserProxy, BrowserCoreRelease, BrowserCoreSettings } from '../types'
@@ -12,7 +13,30 @@ import { CoreSettingsModal } from './coreManagement/CoreSettingsModal'
 import type { CoreDisplayInfo, CoreDownloadForm, CoreDownloadProgress, CoreEditForm, CoreSettingsForm } from './coreManagement.types'
 import { resolveActionErrorMessage } from '../utils/actionErrors'
 
+const coreDownloadProxyModes = new Set(['system', 'direct', 'custom', 'gh-proxy'])
+
+function preferredDownloadProxyMode(settings: BrowserCoreSettings, proxies: BrowserProxy[]) {
+  const configured = coreDownloadProxyModes.has(settings.downloadProxyMode) ? settings.downloadProxyMode : 'system'
+  return configured === 'custom' && proxies.length === 0 ? 'system' : configured
+}
+
+function releaseDownloadForm(release: BrowserCoreRelease, proxyMode: string): CoreDownloadForm {
+  return {
+    releaseTag: release.releaseTag,
+    assetName: release.asset.name,
+    assetSize: release.asset.size,
+    platform: release.asset.platform,
+    architecture: release.asset.architecture,
+    name: `fingerprint-chromium-${release.version}`,
+    url: release.asset.downloadUrl,
+    proxyMode,
+    proxyId: '',
+    mode: 'download',
+  }
+}
+
 export function CoreManagementPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [cores, setCores] = useState<BrowserCore[]>([])
   const [displayList, setDisplayList] = useState<CoreDisplayInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,6 +89,7 @@ export function CoreManagementPage() {
 	const [releases, setReleases] = useState<BrowserCoreRelease[]>([])
 	const [releasesLoading, setReleasesLoading] = useState(false)
 	const [activeTaskId, setActiveTaskId] = useState('')
+	const [firstRunPromptHandled, setFirstRunPromptHandled] = useState(false)
 	const [coreSettings, setCoreSettings] = useState<BrowserCoreSettings>({ provider: 'fingerprint-chromium-static', channel: 'stable', manifestUrl: 'https://raw.githubusercontent.com/hiiidev/Hi-Browser/browser-core-index/browser-core-manifest.json', autoCheckUpdates: true, autoInstallWhenMissing: true, autoInstallRecommended: false, keepVersions: 2, downloadProxyMode: 'system', skippedVersion: '', lastUpdateCheckAt: '' })
 
   useEffect(() => {
@@ -88,6 +113,7 @@ export function CoreManagementPage() {
     EventsOn('download:progress', onDownloadProgress)
 		const onManagedProgress = (data: CoreDownloadProgress) => {
 			setDownloadProgress(data)
+			if (data.taskId) setActiveTaskId(data.taskId)
 			if (data.phase === 'completed') {
 				toast.success(data.message)
 				setTimeout(() => { setDownloadModalOpen(false); setDownloadProgress(null); setActiveTaskId(''); loadData() }, 900)
@@ -163,6 +189,23 @@ export function CoreManagementPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (searchParams.get('prepare') !== '1' || firstRunPromptHandled || loading || releasesLoading) return
+    setFirstRunPromptHandled(true)
+    setSearchParams({}, { replace: true })
+    if (displayList.some(core => core.pathValid)) return
+
+    const recommended = releases[0]
+    if (recommended) {
+      setDownloadForm(releaseDownloadForm(recommended, preferredDownloadProxyMode(coreSettings, proxies)))
+    } else {
+      setDownloadForm({ name: '', url: '', proxyMode: preferredDownloadProxyMode(coreSettings, proxies), proxyId: '', mode: 'download' })
+      toast.warning('暂时无法读取推荐版本，仍可手动填写下载地址')
+    }
+    setDownloadProgress(null)
+    setDownloadModalOpen(true)
+  }, [coreSettings, displayList, firstRunPromptHandled, loading, proxies, releases, releasesLoading, searchParams, setSearchParams])
 
   // 防抖验证路径
   const validatePath = useCallback(async (path: string) => {
@@ -262,16 +305,11 @@ export function CoreManagementPage() {
 		{ key: 'actions', title: '操作', width: '110px', render: (_, release) => <Button size="sm" onClick={() => handleInstallRelease(release)}><Download className="w-4 h-4" />安装</Button> },
 	]
 
-	const handleInstallRelease = async (release: BrowserCoreRelease) => {
-		setDownloadForm({ name: `fingerprint-chromium-${release.version}`, url: release.asset.downloadUrl, proxyMode: 'system', proxyId: '', mode: 'download' })
+	const handleInstallRelease = (release: BrowserCoreRelease) => {
+		setDownloadForm(releaseDownloadForm(release, preferredDownloadProxyMode(coreSettings, proxies)))
+		setDownloadProgress(null)
+		setActiveTaskId('')
 		setDownloadModalOpen(true)
-		setDownloadProgress({ phase: 'starting', progress: 0, message: '正在创建安装任务...' })
-		try {
-			const taskId = await installBrowserCoreRelease(release.releaseTag, '__system__')
-			setActiveTaskId(taskId)
-		} catch (error: any) {
-			setDownloadProgress({ phase: 'failed', progress: 0, message: error?.message || '创建安装任务失败', errorDetail: error?.message })
-		}
 	}
 
   // 打开内核路径
@@ -335,13 +373,13 @@ export function CoreManagementPage() {
   }
 
   const handleOpenDownload = () => {
-    setDownloadForm({ name: '', url: '', proxyMode: 'system', proxyId: '', mode: 'download' })
+    setDownloadForm({ name: '', url: '', proxyMode: preferredDownloadProxyMode(coreSettings, proxies), proxyId: '', mode: 'download' })
     setDownloadProgress(null)
     setDownloadModalOpen(true)
   }
 
   const handleRedownload = (record: CoreDisplayInfo) => {
-    setDownloadForm({ coreId: record.coreId, name: record.coreName, url: '', proxyMode: 'system', proxyId: '', mode: 'redownload' })
+    setDownloadForm({ coreId: record.coreId, name: record.coreName, url: '', proxyMode: preferredDownloadProxyMode(coreSettings, proxies), proxyId: '', mode: 'redownload' })
     setDownloadProgress(null)
     setDownloadModalOpen(true)
   }
@@ -411,7 +449,7 @@ export function CoreManagementPage() {
 
   // 开始下载
   const handleStartDownloadCore = async () => {
-    if (!downloadForm.name.trim() || !downloadForm.url.trim()) {
+    if (!downloadForm.name.trim() || (!downloadForm.releaseTag && !downloadForm.url.trim())) {
       toast.error('请输入名称和下载地址')
       return
     }
@@ -427,7 +465,14 @@ export function CoreManagementPage() {
         targetProxy = '__system__'
       } else if (downloadForm.proxyMode === 'direct') {
         targetProxy = '__direct__'
+      } else if (downloadForm.proxyMode === 'gh-proxy') {
+        targetProxy = '__gh_proxy__'
       } else {
+        if (!downloadForm.proxyId) {
+          toast.error('请选择代理池节点')
+          setDownloadProgress(null)
+          return
+        }
         const proxyProfile = proxies.find(p => p.proxyId === downloadForm.proxyId)
         targetProxy = downloadForm.proxyId
         if (proxyProfile && proxyProfile.proxyConfig) {
@@ -435,7 +480,10 @@ export function CoreManagementPage() {
         }
       }
 
-      if (downloadForm.mode === 'redownload') {
+      if (downloadForm.releaseTag) {
+        const taskId = await installBrowserCoreRelease(downloadForm.releaseTag, targetProxy)
+        setActiveTaskId(taskId)
+      } else if (downloadForm.mode === 'redownload') {
         await redownloadBrowserCore(downloadForm.coreId || '', downloadForm.url.trim(), targetProxy)
       } else {
         await BrowserCoreDownload(downloadForm.name.trim(), downloadForm.url.trim(), targetProxy)
@@ -514,7 +562,7 @@ export function CoreManagementPage() {
 			<div className="border border-[var(--color-warning)]/50 bg-[var(--color-warning)]/10 p-4">
 				<div className="flex items-start justify-between gap-4">
 					<div><h2 className="text-base font-semibold text-[var(--color-text-primary)]">准备浏览器内核</h2><p className="mt-1 text-sm text-[var(--color-text-secondary)]">当前没有可用内核。确认后将安装与本机系统和架构匹配的 fingerprint-chromium，不会静默下载。</p>{releases[0] && <p className="mt-2 text-xs text-[var(--color-text-muted)]">{releases[0].releaseTag} · {releases[0].asset.platform}/{releases[0].asset.architecture} · {(releases[0].asset.size / 1048576).toFixed(1)} MB · GitHub Releases</p>}</div>
-					{releases[0] && <Button onClick={() => handleInstallRelease(releases[0])}><Download className="w-4 h-4" />确认并安装</Button>}
+					{releases[0] && <Button onClick={() => handleInstallRelease(releases[0])}><Download className="w-4 h-4" />确认下载</Button>}
 				</div>
 			</div>
 		)}

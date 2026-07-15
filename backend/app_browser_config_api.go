@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	gort "runtime"
@@ -339,11 +340,11 @@ func (a *App) BrowserCoreDownload(coreName, url, proxyConfig string) error {
 	if a.ctx == nil {
 		return fmt.Errorf("app context is nil")
 	}
-	client, err := a.browserCoreDownloadClient(proxyConfig)
+	targetURL, client, err := a.prepareBrowserCoreDownload(url, proxyConfig)
 	if err != nil {
 		return err
 	}
-	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreName: coreName}, url, proxyConfig, false, client)
+	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreName: coreName}, targetURL, proxyConfig, false, client)
 	return err
 }
 
@@ -390,11 +391,11 @@ func (a *App) BrowserCoreInstallRelease(releaseTag, proxyConfig string) (string,
 		verificationStatus = "publisher-sha256"
 	}
 	metadata := BrowserCore{Provider: provider.Name(), SourceRepository: "adryfish/fingerprint-chromium", ReleaseTag: release.TagName, BrowserVersion: version, ChromiumMajor: browsercore.ChromiumMajor(version), AssetId: asset.ID, AssetName: asset.Name, Platform: gort.GOOS, Architecture: gort.GOARCH, ManagedByApp: true, ReleaseUrl: release.HTMLURL, CapabilitiesJson: string(capsJSON), VerificationStatus: verificationStatus, ArchiveSha256: asset.PublisherSHA256}
-	client, clientErr := a.browserCoreDownloadClient(proxyConfig)
+	targetURL, client, clientErr := a.prepareBrowserCoreDownload(asset.DownloadURL, proxyConfig)
 	if clientErr != nil {
 		return "", clientErr
 	}
-	return a.browserMgr.StartDownloadTaskWithHTTPClient(a.coreAPIContext(), browser.CoreInput{CoreName: coreName, CorePath: filepath.ToSlash(filepath.Join("chrome", coreName)), IsDefault: len(a.browserMgr.ListCores()) == 0, Metadata: &metadata}, asset.DownloadURL, proxyConfig, false, client)
+	return a.browserMgr.StartDownloadTaskWithHTTPClient(a.coreAPIContext(), browser.CoreInput{CoreName: coreName, CorePath: filepath.ToSlash(filepath.Join("chrome", coreName)), IsDefault: len(a.browserMgr.ListCores()) == 0, Metadata: &metadata}, targetURL, proxyConfig, false, client)
 }
 
 func (a *App) BrowserCoreDownloadTask(taskID string) (browser.DownloadTaskState, error) {
@@ -458,12 +459,44 @@ func (a *App) BrowserCoreRedownload(coreId, url, proxyConfig string) error {
 	if !ok {
 		return fmt.Errorf("内核不存在")
 	}
-	client, err := a.browserCoreDownloadClient(proxyConfig)
+	targetURL, client, err := a.prepareBrowserCoreDownload(url, proxyConfig)
 	if err != nil {
 		return err
 	}
-	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreId: core.CoreId, CoreName: core.CoreName, CorePath: core.CorePath, IsDefault: core.IsDefault}, url, proxyConfig, true, client)
+	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreId: core.CoreId, CoreName: core.CoreName, CorePath: core.CorePath, IsDefault: core.IsDefault}, targetURL, proxyConfig, true, client)
 	return err
+}
+
+const browserCoreGitHubProxyPrefix = "https://gh-proxy.com/"
+
+func (a *App) prepareBrowserCoreDownload(rawURL, proxyConfig string) (string, *http.Client, error) {
+	targetURL := strings.TrimSpace(rawURL)
+	clientProxyConfig := proxyConfig
+	if strings.TrimSpace(proxyConfig) == "__gh_proxy__" {
+		proxiedURL, err := browserCoreGitHubProxyURL(targetURL)
+		if err != nil {
+			return "", nil, err
+		}
+		targetURL = proxiedURL
+		clientProxyConfig = "__direct__"
+	}
+	client, err := a.browserCoreDownloadClient(clientProxyConfig)
+	if err != nil {
+		return "", nil, err
+	}
+	return targetURL, client, nil
+}
+
+func browserCoreGitHubProxyURL(rawURL string) (string, error) {
+	value := strings.TrimSpace(rawURL)
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", fmt.Errorf("GitHub 加速地址解析失败: %w", err)
+	}
+	if parsed.Scheme != "https" || !strings.EqualFold(parsed.Hostname(), "github.com") {
+		return "", fmt.Errorf("GitHub 加速仅支持 https://github.com 下载地址")
+	}
+	return browserCoreGitHubProxyPrefix + value, nil
 }
 
 func (a *App) browserCoreDownloadClient(proxyConfig string) (*http.Client, error) {

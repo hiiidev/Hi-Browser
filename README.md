@@ -32,6 +32,8 @@ Hi Browser 当前推荐配套使用的浏览器内核，来源于开源项目 [f
 
 归档先下载到 `download-cache/browser-core/*.part`，再解压到 `chrome/.staging/<task-id>`。安装过程拒绝路径穿越、符号链接和硬链接，并限制文件数量与解压总尺寸；只有可执行文件和架构验证通过后才原子移动到正式目录并注册数据库。失败或取消不会注册残缺内核。
 
+下载弹窗支持系统代理、直连、当前应用代理栈节点和 `https://gh-proxy.com/` GitHub 加速。GitHub 加速属于第三方服务，仅临时重写 HTTPS GitHub 资产地址；下载后仍执行现有校验和 staging 安装流程。
+
 ### macOS Gatekeeper
 
 Hi Browser 不会自动删除 `com.apple.quarantine`，也不会绕过 Gatekeeper。unsigned 内核或应用被拦截时，请先确认 Release 来源与 SHA-256，然后在 Finder 中右键选择“打开”，或前往“系统设置 → 隐私与安全性”查看系统提供的主动放行入口。只有在理解风险并确认文件来源后，才应由用户自行执行系统管理操作。
