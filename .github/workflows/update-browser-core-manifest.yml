@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.MANIFEST_PUSH_TOKEN || github.token }}
 
       - name: Generate manifest
         env:

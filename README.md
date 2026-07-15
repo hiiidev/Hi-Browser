@@ -24,6 +24,8 @@ Ant Browser 当前推荐配套使用的浏览器内核，来源于开源项目 [
 
 `.github/workflows/update-browser-core-manifest.yml` 每 6 小时运行一次，通过 GitHub Actions 的临时 Token 查询上游并发布到 `browser-core-index` 分支。Token 只存在于 Action 运行环境，不进入客户端、数据库、Manifest 或日志。也可在 Actions 页面手动触发该工作流。
 
+仓库需要在 `Settings → Actions → General → Workflow permissions` 中启用 `Read and write permissions`。如果组织策略不允许修改该选项，可创建具有当前仓库 Contents 写权限的 fine-grained token，并保存为 Actions Secret `MANIFEST_PUSH_TOKEN`；工作流会优先使用该 Secret。
+
 ### 下载校验与安装安全
 
 如果 Release 提供 SHA-256 或 checksums 文件，安装前会匹配当前资产并验证；校验不一致会立即停止。发布者未提供独立校验值时，应用仍计算并保存本地 SHA-256，但 UI 会明确标记这不能证明发布来源真实性。
