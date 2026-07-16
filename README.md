@@ -30,13 +30,14 @@ Hi Browser 用于在一台桌面设备上管理多个彼此隔离的浏览器实
 
 ## 原项目与本项目的关系
 
-Hi Browser 推荐使用开源项目 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 提供的浏览器内核：
+Hi Browser 基于开源桌面项目 [Ant Browser](https://github.com/black-ant/Ant-Browser) 继续开发，并推荐使用开源项目 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 提供的浏览器内核：
 
+- Ant Browser 提供原始桌面管理端基础，本项目保留原项目链接与致谢。
 - 上游项目负责 Chromium 内核及指纹能力。
 - Hi Browser 不修改原始 Chromium 内核，而是在其基础上提供桌面管理、实例隔离、代理连接、参数适配、自动化和跨平台发布能力。
 - 内核版本与下载资产来自 [fingerprint-chromium Releases](https://github.com/adryfish/fingerprint-chromium/releases)。
 
-感谢 fingerprint-chromium 项目提供可维护的指纹浏览器内核基础。
+感谢 Ant Browser 与 fingerprint-chromium 项目提供的开源基础。
 
 ## 在原项目基础上修复了什么
 
@@ -91,7 +92,7 @@ Hi Browser 推荐使用开源项目 [fingerprint-chromium](https://github.com/ad
 | 自动化 | Playwright/CDP 脚本导入、脚本包、目标实例选择、运行记录和外部调用 |
 | 插件管理 | 插件安装、导入、启停、删除、实例限制和单实例配置 |
 | 实例迁移 | 配置与完整用户数据导出为 ZIP，并导入为新实例 |
-| 跨平台发布 | Windows 安装包/便携包、Linux deb/tar.gz、macOS unsigned app/zip |
+| 跨平台发布 | Windows 安装包/便携包、Linux deb/tar.gz、macOS unsigned DMG |
 
 ## 界面预览
 
@@ -126,7 +127,7 @@ Hi Browser 推荐使用开源项目 [fingerprint-chromium](https://github.com/ad
 1. 前往 [Releases](https://github.com/hiiidev/Hi-Browser/releases) 下载对应平台版本。
 2. Windows 可选择 NSIS 安装包或便携 ZIP。
 3. Linux 可安装 deb，或解压 tar.gz 后运行。
-4. macOS 解压后运行 `.app`；如果 Gatekeeper 拦截，请先核对来源，再通过 Finder 右键“打开”或“系统设置 → 隐私与安全性”主动放行。
+4. macOS 打开 DMG，将 `Hi Browser.app` 拖入 `Applications`；如果 Gatekeeper 拦截，请先核对来源，再通过 Finder 右键“打开”或“系统设置 → 隐私与安全性”主动放行。
 5. 首次进入“内核管理”，确认版本、平台、架构和下载来源后安装浏览器内核。
 6. 在“代理池配置”添加节点，再创建实例并绑定代理。
 
@@ -154,7 +155,7 @@ Hi Browser 不会自动删除 `com.apple.quarantine`，也不会绕过 Gatekeepe
 macOS 安装版的运行数据位于：
 
 ```text
-~/Library/Application Support/ant-browser/
+~/Library/Application Support/hi-browser/
 ├── config.yaml
 ├── chrome/              # 已安装浏览器内核
 ├── download-cache/
@@ -165,7 +166,7 @@ macOS 安装版的运行数据位于：
     └── <profile-id>/    # 每实例浏览器用户数据
 ```
 
-Linux 安装版默认使用 `$XDG_DATA_HOME/ant-browser`；未设置 `XDG_DATA_HOME` 时使用 `~/.local/share/ant-browser`。
+Linux 安装版默认使用 `$XDG_DATA_HOME/hi-browser`；未设置 `XDG_DATA_HOME` 时使用 `~/.local/share/hi-browser`。升级时，如果新目录不存在而同级旧 `ant-browser` 数据目录存在，应用会自动将旧目录迁移为 `hi-browser`；如果两个目录同时存在，则保留两者且不会覆盖新目录。
 
 源码开发模式的相对配置默认位于仓库目录。不要提交 `data/app.db`、实例目录或其他真实用户数据。
 
@@ -198,6 +199,29 @@ bat\publish.bat -Target WINDOWS -WindowsFormat INSTALLER
 bat\publish.bat -Target WINDOWS -WindowsFormat PORTABLE
 bat\publish.bat -Target WINDOWS -WindowsFormat BOTH
 ```
+
+### GitHub 自动打包与发布
+
+推送 `v*` 标签后，GitHub Actions 会并行构建 macOS、Windows 和 Linux，并将产物上传到同名 GitHub Release：
+
+| 平台 | GitHub 产物 |
+| --- | --- |
+| macOS | `HiBrowser-arm64.dmg`、`HiBrowser-amd64.dmg` |
+| Windows | NSIS 安装包、amd64 便携 ZIP |
+| Linux | amd64/arm64 deb 与 tar.gz |
+
+发布前先将 `wails.json` 中的 `info.productVersion` 更新为目标版本并提交，然后推送对应标签：
+
+```bash
+git add wails.json
+git commit -m "chore: release v1.4.2"
+git push origin master
+
+git tag v1.4.2
+git push origin v1.4.2
+```
+
+也可以在仓库的 `Actions` 页面手动运行对应平台的 Publish 工作流，并通过 `version` 输入临时覆盖打包版本。标签发布需要仓库在 `Settings → Actions → General → Workflow permissions` 中允许 `Read and write permissions`，以便工作流创建或更新 Release。
 
 代理运行时按平台放在 `bin/<os>-<arch>/`。固定来源记录在 `publish/runtime-sources.json`，哈希清单记录在 `publish/runtime-manifest.json`。
 
@@ -243,6 +267,16 @@ data/automation/scripts/<script-id>/
 ### macOS 为什么显示 unsigned 或被 Gatekeeper 拦截
 
 当前 macOS 包用于内部测试，没有 Apple Developer ID 公证。请先核对 Release 来源和 SHA-256，再通过系统提供的主动放行入口打开。
+
+### macOS 提示“应用已损坏，无法打开”
+
+只有在确认 DMG 来自本仓库 Release、且文件校验值可信后，才可以移除 macOS 下载隔离属性。先将应用拖入“应用程序”，关闭应用，然后执行：
+
+```bash
+sudo xattr -rd com.apple.quarantine "/Applications/Hi Browser.app"
+```
+
+重新打开应用即可。该命令会移除系统下载隔离标记，相当于绕过本次 Gatekeeper 隔离检查；不要对来源不明的应用执行。
 
 ## 文档
 

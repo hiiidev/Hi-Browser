@@ -1,16 +1,21 @@
 package apppath
 
 import (
-	"ant-chrome/backend/internal/fsutil"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
 	"sync"
+
+	"ant-chrome/backend/internal/fsutil"
 )
 
-const appStateDirName = "ant-browser"
+const (
+	appStateDirName       = "hi-browser"
+	legacyAppStateDirName = "ant-browser"
+)
 
 type roots struct {
 	installRoot string
@@ -70,6 +75,9 @@ func ensureWritableLayoutForOS(appRoot, goos string) error {
 		return nil
 	}
 
+	if err := migrateLegacyStateRoot(root.stateRoot); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(root.stateRoot, 0755); err != nil {
 		return err
 	}
@@ -96,6 +104,33 @@ func ensureWritableLayoutForOS(appRoot, goos string) error {
 		return err
 	}
 
+	return nil
+}
+
+func migrateLegacyStateRoot(stateRoot string) error {
+	if filepath.Base(stateRoot) != appStateDirName {
+		return nil
+	}
+	if _, err := os.Stat(stateRoot); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect state directory: %w", err)
+	}
+
+	legacyRoot := filepath.Join(filepath.Dir(stateRoot), legacyAppStateDirName)
+	info, err := os.Stat(legacyRoot)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect legacy state directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("legacy state path is not a directory: %s", legacyRoot)
+	}
+	if err := os.Rename(legacyRoot, stateRoot); err != nil {
+		return fmt.Errorf("migrate legacy state directory: %w", err)
+	}
 	return nil
 }
 
@@ -195,7 +230,7 @@ func isMacAppBundleRoot(dir string) bool {
 }
 
 func dirWritable(dir string) bool {
-	file, err := os.CreateTemp(dir, ".ant-browser-write-test-*")
+	file, err := os.CreateTemp(dir, ".hi-browser-write-test-*")
 	if err != nil {
 		return false
 	}

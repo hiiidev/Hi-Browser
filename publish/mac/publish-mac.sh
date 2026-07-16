@@ -100,6 +100,7 @@ require_cmd() {
 
 require_cmd python3
 require_cmd ditto
+require_cmd hdiutil
 require_cmd wails
 
 if [[ -z "$VERSION" ]]; then
@@ -126,10 +127,10 @@ APP_BIN_DIR="$ROOT_DIR/build/bin"
 CHROME_README_SRC="$ROOT_DIR/chrome/README.md"
 CONFIG_INIT_SRC="$ROOT_DIR/publish/config.init.mac.yaml"
 CORE_MANIFEST_SRC="$ROOT_DIR/browser-core-manifest.json"
-ZIP_NAME="HiBrowser-${VERSION}-macos-${ARCH}.zip"
-APP_EXPORT="$OUTPUT_DIR/HiBrowser-${VERSION}-macos-${ARCH}.app"
+DMG_EXPORT="$OUTPUT_DIR/HiBrowser.dmg"
 STAGE_DIR="$STAGING_ROOT/$TARGET"
 APP_STAGE="$STAGE_DIR/Hi Browser.app"
+DMG_STAGE="$STAGE_DIR/dmg"
 
 find_built_app_bundle() {
   python3 - "$APP_BIN_DIR" <<'PY'
@@ -225,7 +226,10 @@ if [[ -z "$APP_SOURCE" || ! -d "$APP_SOURCE" ]]; then
 fi
 
 echo "[4/4] Assembling macOS app bundle..."
-rm -rf "$APP_STAGE" "$APP_EXPORT"
+rm -rf "$APP_STAGE" "$DMG_STAGE"
+rm -f "$DMG_EXPORT"
+rm -rf "$OUTPUT_DIR"/HiBrowser-*"-macos-${ARCH}.app"
+rm -f "$OUTPUT_DIR"/HiBrowser-*"-macos-${ARCH}.zip"
 mkdir -p "$STAGE_DIR" "$OUTPUT_DIR"
 ditto "$APP_SOURCE" "$APP_STAGE"
 
@@ -253,16 +257,21 @@ if command -v codesign >/dev/null 2>&1; then
   codesign --verify --deep --strict "$APP_STAGE"
 fi
 
-ditto "$APP_STAGE" "$APP_EXPORT"
-rm -f "$OUTPUT_DIR/$ZIP_NAME"
-ditto -c -k --sequesterRsrc --keepParent "$APP_EXPORT" "$OUTPUT_DIR/$ZIP_NAME"
+mkdir -p "$DMG_STAGE"
+ditto "$APP_STAGE" "$DMG_STAGE/Hi Browser.app"
+ln -s /Applications "$DMG_STAGE/Applications"
+hdiutil create \
+  -volname "Hi Browser" \
+  -srcfolder "$DMG_STAGE" \
+  -ov \
+  -format UDZO \
+  "$DMG_EXPORT"
 
 echo "Artifacts generated:"
-echo "  - $APP_EXPORT"
-echo "  - $OUTPUT_DIR/$ZIP_NAME"
+echo "  - $DMG_EXPORT"
 
 if [[ "$KEEP_STAGING" -ne 1 ]]; then
-  rm -rf "$APP_STAGE"
+  rm -rf "$STAGE_DIR"
 fi
 
 echo "Done."

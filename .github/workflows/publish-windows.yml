@@ -1,0 +1,120 @@
+name: Publish Windows Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Optional package version override, for example 1.4.2
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Windows amd64
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        shell: pwsh
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Add Go bin to PATH
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value (Join-Path (go env GOPATH) "bin")
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Build installer and portable package
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $version = $env:VERSION
+          if ([string]::IsNullOrWhiteSpace($version) -and $env:GITHUB_REF -like "refs/tags/v*") {
+            $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          }
+          $arguments = @('-Target', 'WINDOWS', '-WindowsFormat', 'BOTH')
+          if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $arguments += @('-Version', $version)
+          }
+          & ./bat/publish.ps1 @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate Windows packages
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem publish/output/HiBrowser-Setup-*.exe | Select-Object -First 1
+          $portable = Get-ChildItem publish/output/HiBrowser-*-windows-amd64-portable.zip | Select-Object -First 1
+          if (-not $installer) { throw 'Windows installer was not generated' }
+          if (-not $portable) { throw 'Windows portable package was not generated' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($portable.FullName)
+          try {
+            $names = @($archive.Entries | ForEach-Object FullName)
+            if (-not ($names -match 'ant-chrome\.exe$')) { throw 'Portable package is missing ant-chrome.exe' }
+            if (-not ($names -match 'bin/xray\.exe$')) { throw 'Portable package is missing xray.exe' }
+            if (-not ($names -match 'bin/sing-box\.exe$')) { throw 'Portable package is missing sing-box.exe' }
+          }
+          finally {
+            $archive.Dispose()
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ant-browser-windows-amd64
+          path: |
+            publish/output/HiBrowser-Setup-*.exe
+            publish/output/HiBrowser-*-windows-amd64-portable.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish Windows Release Assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Upload Windows release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --generate-notes || gh release view "$TAG_NAME" >/dev/null
+          fi
+          gh release upload "$TAG_NAME" release-artifacts/* --clobber

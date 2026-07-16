@@ -52,7 +52,7 @@ The repository does not yet have:
 The repository now includes the first macOS writable-state implementation for app bundle roots:
 
 - when the app root is inside `.app/Contents/MacOS` or `.app/Contents/Resources`
-- writable state is redirected to `~/Library/Application Support/ant-browser`
+- writable state is redirected to `~/Library/Application Support/hi-browser`
 - `bin/` stays in the app bundle
 - config, chrome, and data move to the user state root
 
@@ -84,7 +84,7 @@ macOS is not difficult because of Wails alone. The real complexity comes from fo
 Target:
 
 - `darwin/arm64` first
-- output `.app` and `.zip`
+- output `HiBrowser.dmg` containing `Hi Browser.app`
 - unsigned build is acceptable for internal testing
 
 Why:
@@ -98,7 +98,7 @@ Why:
 Target:
 
 - signed `.app`
-- notarized `.zip` or `.dmg`
+- notarized `.dmg`
 - optional `darwin/amd64` or universal build
 
 Why:
@@ -121,7 +121,7 @@ Recommended structure inside the built app:
 
 Recommended macOS state root:
 
-- `~/Library/Application Support/ant-browser`
+- `~/Library/Application Support/hi-browser`
 
 Recommended contents under the state root:
 
@@ -192,13 +192,13 @@ Recommended responsibilities:
 4. build frontend
 5. run `wails build -platform darwin/arm64`
 6. place runtime binaries into the app bundle
-7. optionally archive to `.zip`
+7. create `HiBrowser.dmg` with an `/Applications` shortcut
 8. optionally sign and notarize when environment variables are provided
 
 Current scaffold status:
 
 - implemented as an unsigned internal-build script
-- outputs `.app` plus `.zip`
+- outputs `HiBrowser.dmg`
 - requires a native macOS host
 - intentionally does not attempt notarization yet
 
@@ -267,7 +267,7 @@ The macOS work should not be considered complete until all items below are verif
 
 - app launches from Finder
 - app launches after copying to `/Applications`
-- first launch creates `~/Library/Application Support/ant-browser`
+- first launch creates `~/Library/Application Support/hi-browser`
 - `config.yaml` is seeded correctly
 - database and `data/` are created under the user state root
 
@@ -324,9 +324,8 @@ The safest first milestone is:
 
 - macOS `arm64`
 - native build on a real Mac
-- unsigned `.app`
-- zipped artifact for internal testing
-- detached writable state under `~/Library/Application Support/ant-browser`
+- unsigned `Hi Browser.app` inside `HiBrowser.dmg`
+- detached writable state under `~/Library/Application Support/hi-browser`
 - bundled `xray` and `sing-box`
 
 Do not start with:

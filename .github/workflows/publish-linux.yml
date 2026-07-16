@@ -37,12 +37,12 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -81,6 +81,9 @@ jobs:
           BROWSERSLIST_IGNORE_OLD_DATA: "1"
         run: |
           set -euo pipefail
+          if [[ -z "${VERSION:-}" && "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           args=(--arch "${{ matrix.arch }}")
           if [[ -n "${VERSION:-}" ]]; then
             args+=(--version "$VERSION")
@@ -135,5 +138,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          gh release view "$TAG_NAME" >/dev/null 2>&1 || gh release create "$TAG_NAME" --generate-notes
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --generate-notes || gh release view "$TAG_NAME" >/dev/null
+          fi
           gh release upload "$TAG_NAME" release-artifacts/* --clobber
