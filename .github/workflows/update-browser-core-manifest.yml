@@ -77,4 +77,12 @@ jobs:
             exit 0
           fi
           git commit -m "chore(browser-core): update static manifest"
-          git push origin "$TARGET_BRANCH"
+          if ! push_output="$(git push origin "HEAD:refs/heads/$TARGET_BRANCH" 2>&1)"; then
+            echo "$push_output" >&2
+            annotation="${push_output//'%'/'%25'}"
+            annotation="${annotation//$'\r'/'%0D'}"
+            annotation="${annotation//$'\n'/'%0A'}"
+            echo "::error title=Manifest branch push failed::$annotation"
+            exit 1
+          fi
+          echo "$push_output"
