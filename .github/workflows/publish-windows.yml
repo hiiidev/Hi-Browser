@@ -60,11 +60,14 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($version) -and $env:GITHUB_REF -like "refs/tags/v*") {
             $version = $env:GITHUB_REF_NAME -replace '^v', ''
           }
-          $arguments = @('-Target', 'WINDOWS', '-WindowsFormat', 'BOTH')
-          if (-not [string]::IsNullOrWhiteSpace($version)) {
-            $arguments += @('-Version', $version)
+          $publishParameters = @{
+            Target = 'WINDOWS'
+            WindowsFormat = 'BOTH'
           }
-          & ./bat/publish.ps1 @arguments
+          if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $publishParameters.Version = $version
+          }
+          & ./bat/publish.ps1 @publishParameters
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Validate Windows packages
