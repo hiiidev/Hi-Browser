@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink, Search } from 'lucide-react'
+import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import { Button, Input, Modal, toast } from '../../../shared/components'
 import type { BrowserExtension, BrowserGroupWithCount, BrowserProfile, BrowserProfileExtensionSettings } from '../types'
 import { fetchBrowserProfileExtensionSettings, saveBrowserProfileExtensionSettings, type BrowserExtensionManualDownloadFile, type BrowserExtensionManualInstallGuide } from '../api/extensions'
@@ -267,7 +268,7 @@ export function ExtensionHistoryModal({ open, records, onClose, onPick, onClear 
                       使用
                     </Button>
                     {record.storeUrl ? (
-                      <Button type="button" size="sm" variant="secondary" onClick={() => window.open(record.storeUrl, '_blank', 'noopener,noreferrer')}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => BrowserOpenURL(record.storeUrl)}>
                         <ExternalLink className="h-4 w-4" />
                         商店页
                       </Button>
@@ -361,7 +362,7 @@ export function ManualInstallModal({ open, guide, files, loading, fileLoading, i
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="secondary" onClick={onImportDirectory}>导入目录</Button>
               {guide.storeUrl ? (
-                <Button type="button" size="sm" variant="secondary" onClick={() => window.open(guide.storeUrl, '_blank', 'noopener,noreferrer')}>商店页</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => BrowserOpenURL(guide.storeUrl)}>商店页</Button>
               ) : null}
             </div>
           </div>

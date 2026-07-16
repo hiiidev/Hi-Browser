@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.MANIFEST_PUSH_TOKEN || github.token }}
 
@@ -63,7 +63,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git ls-remote --exit-code origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
-            git fetch origin "$TARGET_BRANCH"
+            git fetch --depth=1 origin \
+              "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
             git switch --force-create "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
           else
             git switch --orphan "$TARGET_BRANCH"

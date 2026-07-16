@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ConfirmModal, toast } from '../../../shared/components'
 import type { SortOrder } from '../../../shared/components/Table'
+import { uiConfig } from '../../../config/ui.config'
 import type { BrowserProxy, ProxyIPHealthResult } from '../types'
 import { fetchBrowserProxies, fetchBrowserProxyGroups, saveBrowserProxies } from '../api'
 import {
@@ -32,6 +33,7 @@ import { useProxyGlobalRefreshConfig } from './proxyPool/useProxyGlobalRefreshCo
 import { useProxyDeleteFlow } from './proxyPool/useProxyDeleteFlow'
 import { useProxyCoreDownload } from './proxyPool/useProxyCoreDownload'
 import { useProxyPoolFilter } from './proxyPool/useProxyPoolFilter'
+import { getFailedProxyIds } from './proxyPool/failure'
 
 export function ProxyPoolPage() {
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
@@ -64,6 +66,10 @@ export function ProxyPoolPage() {
   const [filterAvailableOnly, setFilterAvailableOnly] = useState(false)
   const [sortColumn, setSortColumn] = useState<string>('') // 默认不排序
   const [sortOrder, setSortOrder] = useState<SortOrder>(undefined)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(uiConfig.pagination.defaultPageSize)
+  const [deleteFailedConfirmOpen, setDeleteFailedConfirmOpen] = useState(false)
+  const [deletingFailed, setDeletingFailed] = useState(false)
 
   const {
     checkSettingsOpen,
@@ -139,6 +145,7 @@ export function ProxyPoolPage() {
     latencyMap,
     latencyEngineMap,
     latencyErrorMap,
+    sessionTestedIds,
     testingAll,
     ipHealthMap,
     checkingIPHealthIds,
@@ -222,18 +229,56 @@ export function ProxyPoolPage() {
     ipHealthMap,
   })
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterProtocol, filterKeyword, filterGroup, filterAvailableOnly, sortColumn, sortOrder, pageSize])
+
+  const pageCount = Math.max(1, Math.ceil(filteredList.length / pageSize))
+
+  useEffect(() => {
+    setCurrentPage(prev => Math.min(prev, pageCount))
+  }, [pageCount])
+
+  const currentPageList = useMemo(() => {
+    const offset = (currentPage - 1) * pageSize
+    return filteredList.slice(offset, offset + pageSize)
+  }, [currentPage, filteredList, pageSize])
+
+  const failedProxyIds = useMemo(
+    () => getFailedProxyIds(filteredList, proxies, latencyMap, sessionTestedIds),
+    [filteredList, latencyMap, proxies, sessionTestedIds],
+  )
+  const isTesting = testingAll || Object.values(latencyMap).some(latency => latency === -1)
+
   const {
     selectedIds,
     selectedCount,
-    allFilteredSelected,
-    someFilteredSelected,
+    allCurrentPageSelected,
+    someCurrentPageSelected,
     batchDeleteConfirmOpen,
     setBatchDeleteConfirmOpen,
     handleToggleAll,
     handleToggleOne,
     handleBatchDeleteConfirm,
     removeSelectedId,
-  } = useProxySelection({ proxies, filteredList, saveProxies })
+    removeSelectedIds,
+  } = useProxySelection({ proxies, currentPageList, saveProxies })
+
+  const handleDeleteFailedConfirm = async () => {
+    if (failedProxyIds.length === 0 || isTesting) return
+    const failedIdSet = new Set(failedProxyIds)
+    setDeletingFailed(true)
+    try {
+      await saveProxies(proxies.filter(proxy => !failedIdSet.has(proxy.proxyId)))
+      removeSelectedIds(failedIdSet)
+      setDeleteFailedConfirmOpen(false)
+      toast.success(`已删除 ${failedIdSet.size} 个测试失败代理`)
+    } catch (error: any) {
+      toast.error(error?.message || '删除测试失败代理失败')
+    } finally {
+      setDeletingFailed(false)
+    }
+  }
 
   const updateChainEditHop = (hop: 'first' | 'second', field: keyof ChainImportForm['first'], value: string) => {
     setChainEditForm(prev => ({
@@ -334,9 +379,10 @@ export function ProxyPoolPage() {
       />
 
       <ProxyPoolTableCard
-        allFilteredSelected={allFilteredSelected}
+        allCurrentPageSelected={allCurrentPageSelected}
         checkingIPHealthIds={checkingIPHealthIds}
-        data={filteredList}
+        data={currentPageList}
+        failedCount={failedProxyIds.length}
         filterGroup={filterGroup}
         filterKeyword={filterKeyword}
         filterProtocol={filterProtocol}
@@ -350,6 +396,7 @@ export function ProxyPoolPage() {
         latencyEngineMap={latencyEngineMap}
         latencyErrorMap={latencyErrorMap}
         loading={loading}
+        isTesting={isTesting}
         onCheckOneIPHealth={(record) => void handleCheckOneIPHealth(record)}
         onClearFilters={() => {
           setFilterProtocol('all')
@@ -366,6 +413,7 @@ export function ProxyPoolPage() {
         onGlobalAutoRefreshEnabledChange={setGlobalAutoRefreshEnabled}
         onGlobalRefreshIntervalMChange={setGlobalRefreshIntervalM}
         onOpenBatchDelete={() => setBatchDeleteConfirmOpen(true)}
+        onOpenDeleteFailed={() => setDeleteFailedConfirmOpen(true)}
         onOpenIPHealthDetail={openIPHealthDetail}
         onRefreshSingleSource={(sourceId) => void refreshSingleSource(sourceId, false)}
         onSort={({ column, order }) => {
@@ -381,11 +429,20 @@ export function ProxyPoolPage() {
         refreshingSourceIds={refreshingSourceIds}
         selectedCount={selectedCount}
         selectedIds={selectedIds}
-        someFilteredSelected={someFilteredSelected}
+        someCurrentPageSelected={someCurrentPageSelected}
         sortColumn={sortColumn}
         sortOrder={sortOrder}
         warmingAllBridges={warmingAllBridges}
         warmingBridgeIds={warmingBridgeIds}
+        currentPage={currentPage}
+        end={filteredList.length === 0 ? 0 : Math.min(currentPage * pageSize, filteredList.length)}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        pageSizeOptions={uiConfig.pagination.pageSizeOptions}
+        start={filteredList.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+        total={filteredList.length}
       />
 
       <ProxyPoolImportModal
@@ -498,6 +555,23 @@ export function ProxyPoolPage() {
 
       <ConfirmModal open={batchDeleteConfirmOpen} onClose={() => setBatchDeleteConfirmOpen(false)} onConfirm={handleBatchDeleteConfirm}
         title="批量删除" content={`确定要删除选中的 ${selectedCount} 个代理吗？此操作不可恢复。`} confirmText="删除" danger />
+
+      <ConfirmModal
+        open={deleteFailedConfirmOpen}
+        onClose={() => { if (!deletingFailed) setDeleteFailedConfirmOpen(false) }}
+        onConfirm={() => { void handleDeleteFailedConfirm() }}
+        title="删除测试失败代理"
+        content={(
+          <div className="space-y-2">
+            <p>确定删除当前筛选结果中的 {failedProxyIds.length} 个测试失败代理吗？此操作不可恢复。</p>
+            <p className="text-sm text-[var(--color-text-muted)]">这些代理不会写入订阅忽略列表，刷新订阅后可能重新出现。</p>
+          </div>
+        )}
+        confirmText="删除失败代理"
+        confirmLoading={deletingFailed}
+        closeOnConfirm={false}
+        danger
+      />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { Download, ExternalLink, FolderOpen, History, Power, Puzzle, RefreshCw, RotateCw, Search, Settings, Trash2, Users } from 'lucide-react'
 import { Button, Card, Input } from '../../../shared/components'
+import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import type { BrowserExtension, BrowserExtensionLookupResult, BrowserProxy } from '../types'
 import { extensionStoreURL, formatExtensionSource, formatExtensionTime, getExtensionManifestMeta, getProxySpeedState } from './extensionManagementUtils'
 
@@ -158,7 +159,7 @@ export function ExtensionInstallCard({
           </div>
           <div className="flex shrink-0 gap-2">
             {lookup.storeUrl ? (
-              <Button type="button" size="sm" variant="secondary" onClick={() => window.open(lookup.storeUrl, '_blank')}>
+              <Button type="button" size="sm" variant="secondary" onClick={() => BrowserOpenURL(lookup.storeUrl)}>
                 <ExternalLink className="h-4 w-4" />
                 商店页
               </Button>
@@ -273,7 +274,7 @@ export function InstalledExtensionCard({ item, busy, updating, onRestrictProfile
         </div>
         <div className="flex shrink-0 gap-2">
           {storeUrl ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => window.open(storeUrl, '_blank')}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => BrowserOpenURL(storeUrl)}>
               <ExternalLink className="h-4 w-4" />
               商店
             </Button>

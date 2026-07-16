@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
-import { Badge, Button, Card } from '../../../shared/components'
+import { Badge, Button, Card, Select } from '../../../shared/components'
 
 interface LogEntry {
   time: string
@@ -194,26 +194,26 @@ export function BrowserLogsPage() {
             placeholder="搜索字段"
             className="px-3 py-1.5 text-sm rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
           />
-          <select
+          <Select
             value={componentFilter}
             onChange={e => setComponentFilter(e.target.value)}
-            className="px-3 py-1.5 text-sm rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
-          >
-            <option value="ALL">全部组件</option>
-            {components.map(component => (
-              <option key={component} value={component}>{component}</option>
-            ))}
-          </select>
-          <select
+            options={[
+              { value: 'ALL', label: '全部组件' },
+              ...components.map(component => ({ value: component, label: component })),
+            ]}
+            aria-label="按组件筛选日志"
+            className="w-full"
+          />
+          <Select
             value={methodFilter}
             onChange={e => setMethodFilter(e.target.value)}
-            className="px-3 py-1.5 text-sm rounded-md border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
-          >
-            <option value="ALL">全部方法</option>
-            {methods.map(method => (
-              <option key={method} value={method}>{method}</option>
-            ))}
-          </select>
+            options={[
+              { value: 'ALL', label: '全部方法' },
+              ...methods.map(method => ({ value: method, label: method })),
+            ]}
+            aria-label="按方法筛选日志"
+            className="w-full"
+          />
           <input
             type="number"
             min="0"

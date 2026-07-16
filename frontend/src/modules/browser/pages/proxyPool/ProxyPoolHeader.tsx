@@ -30,18 +30,18 @@ export function ProxyPoolHeader({
   totalCount,
 }: ProxyPoolHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="pt-1">
         <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">代理池配置</h1>
       </div>
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] px-2 py-1 shadow-sm">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] px-2 py-1 shadow-sm">
           <span className="inline-flex items-center gap-1 whitespace-nowrap px-2 text-xs text-[var(--color-text-muted)]">
             内核状态：{currentConnectorStatus || '未知'}
           </span>
           <Button size="sm" variant="secondary" onClick={onOpenCoreDownload}>下载内核</Button>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] px-2 py-1 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-primary)] px-2 py-1 shadow-sm">
           <Button
             size="sm"
             variant="secondary"

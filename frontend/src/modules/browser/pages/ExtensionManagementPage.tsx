@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from '../../../shared/components'
+import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import type { BrowserExtension, BrowserExtensionLookupResult, BrowserProxy } from '../types'
 import {
   deleteBrowserExtension,
@@ -147,7 +148,7 @@ export function ExtensionManagementPage() {
   }
 
   const handleOpenWebStoreQuery = () => {
-    window.open(buildChromeWebStoreQueryURL(query), '_blank', 'noopener,noreferrer')
+    BrowserOpenURL(buildChromeWebStoreQueryURL(query))
   }
 
   const refreshManualFiles = async () => {

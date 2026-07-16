@@ -93,6 +93,8 @@ interface ConfirmModalProps {
   confirmText?: string
   cancelText?: string
   danger?: boolean
+  confirmLoading?: boolean
+  closeOnConfirm?: boolean
 }
 
 export function ConfirmModal({
@@ -104,6 +106,8 @@ export function ConfirmModal({
   confirmText = '确定',
   cancelText = '取消',
   danger = false,
+  confirmLoading = false,
+  closeOnConfirm = true,
 }: ConfirmModalProps) {
   return (
     <Modal
@@ -113,14 +117,15 @@ export function ConfirmModal({
       width="400px"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose} disabled={confirmLoading}>
             {cancelText}
           </Button>
           <Button
             variant={danger ? 'danger' : 'primary'}
+            loading={confirmLoading}
             onClick={() => {
               onConfirm()
-              onClose()
+              if (closeOnConfirm) onClose()
             }}
           >
             {confirmText}

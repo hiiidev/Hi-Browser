@@ -1,13 +1,15 @@
 import { useMemo } from 'react'
 
-import { Button, Card, Input, Switch, Table } from '../../../../shared/components'
+import { Button, Card, Table } from '../../../../shared/components'
 import type { SortOrder, TableColumn } from '../../../../shared/components/Table'
 import type { ProxyIPHealthResult } from '../../types'
 
 import { BUILTIN_PROXY_IDS, sourceHostLabel, type ProxyDisplayInfo } from './helpers'
+import { ProxyPoolPagination } from './ProxyPoolPagination'
+import { ProxyPoolToolbar } from './ProxyPoolToolbar'
 
 interface ProxyPoolTableCardProps {
-  allFilteredSelected: boolean
+  allCurrentPageSelected: boolean
   checkingIPHealthIds: Set<string>
   data: ProxyDisplayInfo[]
   filterGroup: string
@@ -20,6 +22,8 @@ interface ProxyPoolTableCardProps {
   groups: string[]
   ipHealthMap: Record<string, ProxyIPHealthResult>
   loading: boolean
+  failedCount: number
+  isTesting: boolean
   onCheckOneIPHealth: (record: ProxyDisplayInfo) => void
   onClearFilters: () => void
   onDelete: (proxyId: string) => void
@@ -31,6 +35,7 @@ interface ProxyPoolTableCardProps {
   onGlobalAutoRefreshEnabledChange: (checked: boolean) => void
   onGlobalRefreshIntervalMChange: (nextValue: string) => void
   onOpenBatchDelete: () => void
+  onOpenDeleteFailed: () => void
   onOpenIPHealthDetail: (proxyId: string) => void
   onRefreshSingleSource: (sourceId: string) => void
   onSort: (next: { column: string; order: SortOrder }) => void
@@ -43,7 +48,7 @@ interface ProxyPoolTableCardProps {
   refreshingSourceIds: Set<string>
   selectedCount: number
   selectedIds: Set<string>
-  someFilteredSelected: boolean
+  someCurrentPageSelected: boolean
   sortColumn: string
   sortOrder: SortOrder
   latencyMap: Record<string, number>
@@ -51,10 +56,19 @@ interface ProxyPoolTableCardProps {
   latencyErrorMap: Record<string, string>
   warmingBridgeIds: Set<string>
   warmingAllBridges: boolean
+  currentPage: number
+  end: number
+  onPageChange: (page: number) => void
+  onPageSizeChange: (pageSize: number) => void
+  pageCount: number
+  pageSize: number
+  pageSizeOptions: number[]
+  start: number
+  total: number
 }
 
 export function ProxyPoolTableCard({
-  allFilteredSelected,
+  allCurrentPageSelected,
   checkingIPHealthIds,
   data,
   filterGroup,
@@ -67,6 +81,8 @@ export function ProxyPoolTableCard({
   groups,
   ipHealthMap,
   loading,
+  failedCount,
+  isTesting,
   onCheckOneIPHealth,
   onClearFilters,
   onDelete,
@@ -78,6 +94,7 @@ export function ProxyPoolTableCard({
   onGlobalAutoRefreshEnabledChange,
   onGlobalRefreshIntervalMChange,
   onOpenBatchDelete,
+  onOpenDeleteFailed,
   onOpenIPHealthDetail,
   onRefreshSingleSource,
   onSort,
@@ -90,7 +107,7 @@ export function ProxyPoolTableCard({
   refreshingSourceIds,
   selectedCount,
   selectedIds,
-  someFilteredSelected,
+  someCurrentPageSelected,
   sortColumn,
   sortOrder,
   latencyMap,
@@ -98,6 +115,15 @@ export function ProxyPoolTableCard({
   latencyErrorMap,
   warmingBridgeIds,
   warmingAllBridges,
+  currentPage,
+  end,
+  onPageChange,
+  onPageSizeChange,
+  pageCount,
+  pageSize,
+  pageSizeOptions,
+  start,
+  total,
 }: ProxyPoolTableCardProps) {
   const hasActiveFilters = filterProtocol !== 'all' || !!filterKeyword || filterGroup !== 'all' || filterAvailableOnly
 
@@ -171,6 +197,7 @@ export function ProxyPoolTableCard({
           type="checkbox"
           checked={selectedIds.has(record.proxyId)}
           disabled={BUILTIN_PROXY_IDS.has(record.proxyId)}
+          aria-label={`选择代理 ${record.proxyName}`}
           onChange={() => onToggleOne(record.proxyId)}
           onClick={event => event.stopPropagation()}
           className="w-4 h-4 rounded border-[var(--color-border-default)] accent-[var(--color-accent)] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
@@ -240,7 +267,7 @@ export function ProxyPoolTableCard({
         const sourceId = record.sourceId || ''
         const hasSource = !!sourceId && !!record.sourceUrl
         return (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {hasSource && (
               <Button
                 size="sm"
@@ -327,97 +354,61 @@ export function ProxyPoolTableCard({
   ])
 
   return (
-    <Card>
-      <div className="flex items-center gap-3 mb-4">
-        <Input
-          value={filterKeyword}
-          onChange={event => onFilterKeywordChange(event.target.value)}
-          placeholder="搜索名称或服务器..."
-          style={{ width: '220px' }}
+    <Card padding="none">
+      <ProxyPoolToolbar
+        allCurrentPageSelected={allCurrentPageSelected}
+        failedCount={failedCount}
+        filterAvailableOnly={filterAvailableOnly}
+        filterGroup={filterGroup}
+        filterKeyword={filterKeyword}
+        filterProtocol={filterProtocol}
+        globalAutoRefreshEnabled={globalAutoRefreshEnabled}
+        globalRefreshIntervalM={globalRefreshIntervalM}
+        groups={groups}
+        hasActiveFilters={hasActiveFilters}
+        hasSelectablePageItems={data.some(item => !BUILTIN_PROXY_IDS.has(item.proxyId))}
+        isTesting={isTesting}
+        onClearFilters={onClearFilters}
+        onDeleteFailed={onOpenDeleteFailed}
+        onFilterAvailableOnlyChange={onFilterAvailableOnlyChange}
+        onFilterGroupChange={onFilterGroupChange}
+        onFilterKeywordChange={onFilterKeywordChange}
+        onFilterProtocolChange={onFilterProtocolChange}
+        onGlobalAutoRefreshEnabledChange={onGlobalAutoRefreshEnabledChange}
+        onGlobalRefreshIntervalMChange={onGlobalRefreshIntervalMChange}
+        onOpenBatchDelete={onOpenBatchDelete}
+        onToggleAll={onToggleAll}
+        onWarmupSelected={onWarmupSelected}
+        protocolOptions={protocolOptions}
+        selectedCount={selectedCount}
+        someCurrentPageSelected={someCurrentPageSelected}
+        warmingAllBridges={warmingAllBridges}
+      />
+      <div className="overflow-x-auto">
+        <Table
+          columns={columns}
+          data={data}
+          rowKey="proxyId"
+          loading={loading}
+          emptyText="暂无代理配置，点击上方按钮添加或导入"
+          sortColumn={sortColumn}
+          sortOrder={sortOrder}
+          onSort={onSort}
+          maxHeight="calc(100vh - 390px)"
+          tableClassName="min-w-[1540px]"
         />
-        <select
-          value={filterProtocol}
-          onChange={event => onFilterProtocolChange(event.target.value)}
-          className="h-9 px-3 text-sm rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-border-strong)] focus:ring-1 focus:ring-[var(--color-border-strong)] transition-colors duration-150"
-        >
-          {protocolOptions.map(protocol => (
-            <option key={protocol} value={protocol}>{protocol === 'all' ? '全部协议' : protocol.toUpperCase()}</option>
-          ))}
-        </select>
-        <select
-          value={filterGroup}
-          onChange={event => onFilterGroupChange(event.target.value)}
-          className="h-9 px-3 text-sm rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-border-strong)] focus:ring-1 focus:ring-[var(--color-border-strong)] transition-colors duration-150"
-        >
-          <option value="all">全部分组</option>
-          {groups.map(group => <option key={group} value={group}>{group}</option>)}
-        </select>
-        {hasActiveFilters && (
-          <Button size="sm" variant="ghost" onClick={onClearFilters}>清除筛选</Button>
-        )}
-        <label className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)] cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={filterAvailableOnly}
-            onChange={event => onFilterAvailableOnlyChange(event.target.checked)}
-            className="w-4 h-4 rounded border-[var(--color-border-default)] accent-[var(--color-accent)] cursor-pointer"
-          />
-          只展示可用
-        </label>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2 py-1.5">
-          <span className="text-xs text-[var(--color-text-muted)]">全局自动刷新</span>
-          <Switch
-            checked={globalAutoRefreshEnabled}
-            onChange={onGlobalAutoRefreshEnabledChange}
-          />
-          <Input
-            type="number"
-            min={5}
-            max={1440}
-            value={globalRefreshIntervalM}
-            onChange={event => onGlobalRefreshIntervalMChange(event.target.value)}
-            className="w-24"
-            disabled={!globalAutoRefreshEnabled}
-          />
-          <span className="text-xs text-[var(--color-text-muted)]">分钟</span>
-        </div>
-        <div className="flex-1" />
-        {data.length > 0 && (
-          <label className="flex items-center gap-1.5 text-sm text-[var(--color-text-muted)] cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={allFilteredSelected}
-              ref={(element) => {
-                if (element) {
-                  element.indeterminate = someFilteredSelected && !allFilteredSelected
-                }
-              }}
-              onChange={onToggleAll}
-              className="w-4 h-4 rounded border-[var(--color-border-default)] accent-[var(--color-accent)] cursor-pointer"
-            />
-            全选
-          </label>
-        )}
-        {selectedCount > 0 && (
-          <>
-            <Button size="sm" variant="secondary" onClick={onWarmupSelected} loading={warmingAllBridges}>
-              预热所选 ({selectedCount})
-            </Button>
-            <Button size="sm" variant="danger" onClick={onOpenBatchDelete}>
-              删除所选 ({selectedCount})
-            </Button>
-          </>
-        )}
       </div>
-      <Table
-        columns={columns}
-        data={data}
-        rowKey="proxyId"
-        loading={loading}
-        emptyText="暂无代理配置，点击上方按钮添加或导入"
-        sortColumn={sortColumn}
-        sortOrder={sortOrder}
-        onSort={onSort}
+      <ProxyPoolPagination
+        currentPage={currentPage}
+        end={end}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        pageSizeOptions={pageSizeOptions}
+        selectedCount={selectedCount}
+        start={start}
+        total={total}
       />
     </Card>
   )

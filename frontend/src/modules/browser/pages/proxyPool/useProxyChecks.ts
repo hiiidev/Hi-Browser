@@ -22,6 +22,7 @@ export function useProxyChecks({ proxies }: UseProxyChecksOptions) {
   const [latencyMap, setLatencyMap] = useState<Record<string, number>>({})
   const [latencyEngineMap, setLatencyEngineMap] = useState<Record<string, string>>({})
   const [latencyErrorMap, setLatencyErrorMap] = useState<Record<string, string>>({})
+  const [sessionTestedIds, setSessionTestedIds] = useState<Set<string>>(new Set())
   const [testingAll, setTestingAll] = useState(false)
   const [ipHealthMap, setIPHealthMap] = useState<Record<string, ProxyIPHealthResult>>({})
   const [checkingIPHealthIds, setCheckingIPHealthIds] = useState<Set<string>>(new Set())
@@ -99,6 +100,7 @@ export function useProxyChecks({ proxies }: UseProxyChecksOptions) {
       return
     }
     setLatencyMap(prev => ({ ...prev, [record.proxyId]: -1 }))
+    setSessionTestedIds(prev => new Set(prev).add(record.proxyId))
     setLatencyEngineMap(prev => {
       const next = { ...prev }
       delete next[record.proxyId]
@@ -109,17 +111,23 @@ export function useProxyChecks({ proxies }: UseProxyChecksOptions) {
       delete next[record.proxyId]
       return next
     })
-    const result = await browserProxyTestSpeed(record.proxyId)
-    const val = toLatencyValue(result.ok, result.latencyMs, result.error)
-    setLatencyMap(prev => ({ ...prev, [record.proxyId]: val }))
-    if (result.error) setLatencyErrorMap(prev => ({ ...prev, [record.proxyId]: result.error || '' }))
-    if (result.engine) setLatencyEngineMap(prev => ({ ...prev, [record.proxyId]: result.engine || '' }))
+    try {
+      const result = await browserProxyTestSpeed(record.proxyId)
+      const val = toLatencyValue(result.ok, result.latencyMs, result.error)
+      setLatencyMap(prev => ({ ...prev, [record.proxyId]: val }))
+      if (result.error) setLatencyErrorMap(prev => ({ ...prev, [record.proxyId]: result.error || '' }))
+      if (result.engine) setLatencyEngineMap(prev => ({ ...prev, [record.proxyId]: result.engine || '' }))
+    } catch (error: any) {
+      setLatencyMap(prev => ({ ...prev, [record.proxyId]: -4 }))
+      setLatencyErrorMap(prev => ({ ...prev, [record.proxyId]: error?.message || '测速失败' }))
+    }
   }
 
   const handleTestAll = async (items: ProxyDisplayInfo[]) => {
     const testable = items.filter(p => p.proxyConfig !== 'direct://')
     if (testable.length === 0) return
     setTestingAll(true)
+    setSessionTestedIds(prev => new Set([...Array.from(prev), ...testable.map(proxy => proxy.proxyId)]))
     const init: Record<string, number> = {}
     testable.forEach(p => { init[p.proxyId] = -1 })
     setLatencyMap(prev => ({ ...prev, ...init }))
@@ -165,6 +173,22 @@ export function useProxyChecks({ proxies }: UseProxyChecksOptions) {
         })
         return next
       })
+    } catch (error: any) {
+      setLatencyMap(prev => {
+        const next = { ...prev }
+        testable.forEach(proxy => {
+          if (next[proxy.proxyId] === -1) next[proxy.proxyId] = -4
+        })
+        return next
+      })
+      setLatencyErrorMap(prev => {
+        const next = { ...prev }
+        testable.forEach(proxy => {
+          if (!next[proxy.proxyId]) next[proxy.proxyId] = error?.message || '测速失败'
+        })
+        return next
+      })
+      toast.error(error?.message || '批量测速失败')
     } finally {
       off()
       setTestingAll(false)
@@ -287,6 +311,7 @@ export function useProxyChecks({ proxies }: UseProxyChecksOptions) {
     latencyMap,
     latencyEngineMap,
     latencyErrorMap,
+    sessionTestedIds,
     testingAll,
     ipHealthMap,
     checkingIPHealthIds,
