@@ -10,10 +10,10 @@ const directProxyID = "__direct__"
 // ApplyDefaults 应用默认配置
 func (m *Manager) ApplyDefaults(profile *Profile) bool {
 	log := logger.New("Browser")
-	if profile.FingerprintArgs == nil || len(profile.FingerprintArgs) == 0 {
+	if len(profile.FingerprintArgs) == 0 {
 		profile.FingerprintArgs = append([]string{}, m.Config.Browser.DefaultFingerprintArgs...)
 	}
-	if profile.LaunchArgs == nil || len(profile.LaunchArgs) == 0 {
+	if len(profile.LaunchArgs) == 0 {
 		profile.LaunchArgs = append([]string{}, m.Config.Browser.DefaultLaunchArgs...)
 	}
 	if strings.TrimSpace(profile.UserDataDir) == "" {

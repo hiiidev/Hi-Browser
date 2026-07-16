@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -25,6 +27,11 @@ type resolvedNodeRuntime struct {
 type nodeProbeResult struct {
 	Path    string `json:"path"`
 	Version string `json:"version"`
+}
+
+type nodeCandidate struct {
+	path       string
+	resolution string
 }
 
 type SystemNodeProbeResult struct {
@@ -71,34 +78,7 @@ func (m *Manager) resolveNodeRuntime(runtimeDir string, auto config.AutomationCo
 }
 
 func (m *Manager) resolveSystemNode(ctx context.Context, explicitPath string) (resolvedNodeRuntime, error) {
-	type nodeCandidate struct {
-		path       string
-		resolution string
-	}
-
-	candidatePaths := make([]nodeCandidate, 0, 2)
-	if trimmed := strings.TrimSpace(explicitPath); trimmed != "" {
-		candidatePaths = append(candidatePaths, nodeCandidate{
-			path:       trimmed,
-			resolution: "已使用配置的系统 Node 路径",
-		})
-	}
-	if lookupPath, err := exec.LookPath("node"); err == nil && strings.TrimSpace(lookupPath) != "" {
-		lookupPath = strings.TrimSpace(lookupPath)
-		duplicate := false
-		for _, existing := range candidatePaths {
-			if strings.EqualFold(existing.path, lookupPath) {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			candidatePaths = append(candidatePaths, nodeCandidate{
-				path:       lookupPath,
-				resolution: "已使用 PATH 中的系统 Node",
-			})
-		}
-	}
+	candidatePaths := m.systemNodeCandidates(explicitPath)
 
 	var lastErr error
 	for _, candidate := range candidatePaths {
@@ -121,6 +101,76 @@ func (m *Manager) resolveSystemNode(ctx context.Context, explicitPath string) (r
 		return resolvedNodeRuntime{}, lastErr
 	}
 	return resolvedNodeRuntime{}, fmt.Errorf("未找到系统 Node")
+}
+
+func (m *Manager) systemNodeCandidates(explicitPath string) []nodeCandidate {
+	candidates := make([]nodeCandidate, 0, 8)
+	add := func(path, resolution string, requireExisting bool) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if requireExisting {
+			if info, err := os.Stat(path); err != nil || info.IsDir() {
+				return
+			}
+		}
+		for _, existing := range candidates {
+			if strings.EqualFold(filepath.Clean(existing.path), filepath.Clean(path)) {
+				return
+			}
+		}
+		candidates = append(candidates, nodeCandidate{path: path, resolution: resolution})
+	}
+
+	add(explicitPath, "已使用配置的系统 Node 路径", false)
+	if lookupPath, err := exec.LookPath("node"); err == nil {
+		add(lookupPath, "已使用 PATH 中的系统 Node", false)
+	}
+
+	home, _ := os.UserHomeDir()
+	targetOS := strings.ToLower(strings.TrimSpace(m.options.TargetOS))
+	if targetOS == "" {
+		targetOS = goruntime.GOOS
+	}
+	for _, path := range commonSystemNodePaths(targetOS, home) {
+		add(path, "已使用系统常见安装位置中的 Node", true)
+	}
+	return candidates
+}
+
+func commonSystemNodePaths(goos, home string) []string {
+	home = strings.TrimSpace(home)
+	paths := make([]string, 0, 8)
+	appendHome := func(parts ...string) {
+		if home != "" {
+			paths = append(paths, filepath.Join(append([]string{home}, parts...)...))
+		}
+	}
+
+	switch strings.ToLower(strings.TrimSpace(goos)) {
+	case "darwin":
+		paths = append(paths, "/opt/homebrew/bin/node", "/usr/local/bin/node", "/opt/local/bin/node")
+		appendHome(".volta", "bin", "node")
+		appendHome(".asdf", "shims", "node")
+		appendHome(".local", "share", "mise", "shims", "node")
+		appendHome(".fnm", "aliases", "default", "bin", "node")
+	case "linux":
+		paths = append(paths, "/usr/local/bin/node", "/usr/bin/node", "/snap/bin/node")
+		appendHome(".volta", "bin", "node")
+		appendHome(".asdf", "shims", "node")
+		appendHome(".local", "share", "mise", "shims", "node")
+		appendHome(".fnm", "aliases", "default", "bin", "node")
+	case "windows":
+		if programFiles := strings.TrimSpace(os.Getenv("ProgramFiles")); programFiles != "" {
+			paths = append(paths, filepath.Join(programFiles, "nodejs", "node.exe"))
+		}
+		if localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); localAppData != "" {
+			paths = append(paths, filepath.Join(localAppData, "Programs", "nodejs", "node.exe"))
+		}
+		appendHome("scoop", "apps", "nodejs", "current", "node.exe")
+	}
+	return paths
 }
 
 func (m *Manager) probeNodeExecutable(ctx context.Context, nodePath string) (nodeProbeResult, error) {

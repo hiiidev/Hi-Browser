@@ -196,7 +196,7 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, cor
 	if _, err := os.Stat(targetDir); err == nil && !replaceExisting {
 		sendEvent("error", 0, "同名内核目录已存在，请改名下载；如需覆盖，请在内核列表使用重新下载")
 		return
-	} else if err != nil && !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		sendEvent("error", 0, "检查内核目录失败: "+err.Error())
 		return
 	}
@@ -483,7 +483,7 @@ func replaceCoreDirectory(targetDir string, tempExtractDir string, replaceExisti
 		if err := os.Rename(targetDir, backupDir); err != nil {
 			return err
 		}
-	} else if err != nil && !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 

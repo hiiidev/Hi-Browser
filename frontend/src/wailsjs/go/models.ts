@@ -396,11 +396,11 @@ export namespace backend {
 	    notes: string;
 	    asset: browsercore.Asset;
 	    stale: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BrowserCoreReleaseInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.provider = source["provider"];
@@ -412,7 +412,7 @@ export namespace backend {
 	        this.asset = this.convertValues(source["asset"], browsercore.Asset);
 	        this.stale = source["stale"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -437,11 +437,11 @@ export namespace backend {
 	    architecture: string;
 	    recommended?: BrowserCoreReleaseInfo;
 	    message: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BrowserCorePreparationStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.hasValidCore = source["hasValidCore"];
@@ -450,7 +450,7 @@ export namespace backend {
 	        this.recommended = this.convertValues(source["recommended"], BrowserCoreReleaseInfo);
 	        this.message = source["message"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -469,7 +469,7 @@ export namespace backend {
 		    return a;
 		}
 	}
-
+	
 	export class BrowserExtensionManualDownloadFile {
 	    fileName: string;
 	    filePath: string;
@@ -1089,7 +1089,7 @@ export namespace browser {
 	        this.isDefault = source["isDefault"];
 	        this.metadata = this.convertValues(source["metadata"], config.BrowserCore);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1138,11 +1138,11 @@ export namespace browser {
 	    canRetry: boolean;
 	    createdAt: string;
 	    updatedAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DownloadTaskState(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.taskId = source["taskId"];
@@ -1296,6 +1296,8 @@ export namespace browser {
 	    tags: string[];
 	    keywords: string[];
 	    groupId: string;
+	    iconBadge: string;
+	    iconBadgeColor: string;
 	    launchCode: string;
 	    running: boolean;
 	    debugPort: number;
@@ -1330,6 +1332,8 @@ export namespace browser {
 	        this.tags = source["tags"];
 	        this.keywords = source["keywords"];
 	        this.groupId = source["groupId"];
+	        this.iconBadge = source["iconBadge"];
+	        this.iconBadgeColor = source["iconBadgeColor"];
 	        this.launchCode = source["launchCode"];
 	        this.running = source["running"];
 	        this.debugPort = source["debugPort"];
@@ -1387,6 +1391,8 @@ export namespace browser {
 	    tags: string[];
 	    keywords: string[];
 	    groupId: string;
+	    iconBadge: string;
+	    iconBadgeColor: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileInput(source);
@@ -1404,6 +1410,8 @@ export namespace browser {
 	        this.tags = source["tags"];
 	        this.keywords = source["keywords"];
 	        this.groupId = source["groupId"];
+	        this.iconBadge = source["iconBadge"];
+	        this.iconBadgeColor = source["iconBadgeColor"];
 	    }
 	}
 	export class Settings {
@@ -1456,7 +1464,7 @@ export namespace browser {
 }
 
 export namespace browsercore {
-
+	
 	export class Asset {
 	    id: number;
 	    name: string;
@@ -1469,11 +1477,11 @@ export namespace browsercore {
 	    checksumAssetId?: number;
 	    checksumAssetName?: string;
 	    checksumDownloadUrl?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Asset(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1487,6 +1495,98 @@ export namespace browsercore {
 	        this.checksumAssetId = source["checksumAssetId"];
 	        this.checksumAssetName = source["checksumAssetName"];
 	        this.checksumDownloadUrl = source["checksumDownloadUrl"];
+	    }
+	}
+	export class FingerprintArgEntry {
+	    arg: string;
+	    source: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FingerprintArgEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.arg = source["arg"];
+	        this.source = source["source"];
+	    }
+	}
+	export class FingerprintArgResult {
+	    args: string[];
+	    warnings: string[];
+	    adjusted: string[];
+	    entries: FingerprintArgEntry[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FingerprintArgResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.args = source["args"];
+	        this.warnings = source["warnings"];
+	        this.adjusted = source["adjusted"];
+	        this.entries = this.convertValues(source["entries"], FingerprintArgEntry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class FingerprintCapabilities {
+	    provider: string;
+	    chromiumMajor: number;
+	    hostPlatform: string;
+	    targetPlatform: string;
+	    supportedBrands: string[];
+	    supportedParameters: string[];
+	    deprecatedParameters: string[];
+	    unsupportedParameters: string[];
+	    warnings: string[];
+	    gpuSpoofingMode: string;
+	    manualGpuConfig: boolean;
+	    webpageLanguage: boolean;
+	    applicationLocaleMode: string;
+	    intlLocaleMode: string;
+	    ttsVoicesMode: string;
+	    fontsMode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FingerprintCapabilities(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.chromiumMajor = source["chromiumMajor"];
+	        this.hostPlatform = source["hostPlatform"];
+	        this.targetPlatform = source["targetPlatform"];
+	        this.supportedBrands = source["supportedBrands"];
+	        this.supportedParameters = source["supportedParameters"];
+	        this.deprecatedParameters = source["deprecatedParameters"];
+	        this.unsupportedParameters = source["unsupportedParameters"];
+	        this.warnings = source["warnings"];
+	        this.gpuSpoofingMode = source["gpuSpoofingMode"];
+	        this.manualGpuConfig = source["manualGpuConfig"];
+	        this.webpageLanguage = source["webpageLanguage"];
+	        this.applicationLocaleMode = source["applicationLocaleMode"];
+	        this.intlLocaleMode = source["intlLocaleMode"];
+	        this.ttsVoicesMode = source["ttsVoicesMode"];
+	        this.fontsMode = source["fontsMode"];
 	    }
 	}
 
@@ -1577,11 +1677,11 @@ export namespace config {
 	    downloadProxyMode: string;
 	    skippedVersion: string;
 	    lastUpdateCheckAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new BrowserCoreConfig(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.provider = source["provider"];

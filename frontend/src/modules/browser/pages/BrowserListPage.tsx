@@ -483,6 +483,8 @@ export function BrowserListPage() {
         tags: profile.tags,
         keywords: profile.keywords || [],
         groupId: profile.groupId || '',
+        iconBadge: profile.iconBadge || '',
+        iconBadgeColor: profile.iconBadgeColor || '#2563EB',
       })
       mergeProfileState(updated || { ...profile, proxyId: proxy.proxyId, proxyConfig: '' })
       toast.success('代理已切换')

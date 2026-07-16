@@ -14,6 +14,8 @@
   tags: string[]
   keywords: string[]
   groupId?: string
+  iconBadge: string
+  iconBadgeColor: string
   running: boolean
   debugPort: number
   debugReady: boolean
@@ -39,6 +41,8 @@ export interface BrowserProfileInput {
   tags: string[]
   keywords: string[]
   groupId?: string
+  iconBadge: string
+  iconBadgeColor: string
 }
 
 export interface BrowserProfilePackageExportResult {
@@ -136,6 +140,37 @@ export interface BrowserCore {
 	releaseUrl?: string
 	capabilitiesJson?: string
 	archiveSize?: number
+}
+
+export interface FingerprintCapabilities {
+	provider: string
+	chromiumMajor: number
+	hostPlatform: string
+	targetPlatform: string
+	supportedBrands: string[]
+	supportedParameters: string[]
+	deprecatedParameters: string[]
+	unsupportedParameters: string[]
+	warnings: string[]
+	gpuSpoofingMode: string
+	manualGpuConfig: boolean
+	webpageLanguage: boolean
+	applicationLocaleMode: string
+	intlLocaleMode: string
+	ttsVoicesMode: string
+	fontsMode: string
+}
+
+export interface FingerprintArgEntry {
+	arg: string
+	source: 'user' | 'compatibility-migration' | 'core-capability-adjustment' | string
+}
+
+export interface FingerprintArgResult {
+	args: string[]
+	warnings: string[]
+	adjusted: string[]
+	entries: FingerprintArgEntry[]
 }
 
 export interface BrowserCoreRelease {

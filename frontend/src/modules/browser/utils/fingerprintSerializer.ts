@@ -124,13 +124,60 @@ export function dedupeArgs(args: string[]): string[] {
 	return args.filter((arg, index) => lastIndex.get(arg.split('=', 1)[0]) === index)
 }
 
-export function applyFingerprintCapabilities(args: string[], chromiumMajor = 0): string[] {
-	const normalized = dedupeArgs(args.map(arg => arg === '--fingerprint-platform=mac' ? '--fingerprint-platform=macos' : arg))
-	if (chromiumMajor < 144) return normalized
-	const legacy = new Set(['--fingerprint-gpu-vendor', '--fingerprint-gpu-renderer', '--disable-gpu-fingerprint'])
-	const filtered = normalized.filter(arg => !legacy.has(arg.split('=', 1)[0]))
-	if (filtered.length !== normalized.length && !filtered.some(arg => arg.startsWith('--disable-spoofing='))) filtered.push('--disable-spoofing=gpu')
-	return filtered
+export function applyFingerprintCapabilities(args: string[]): string[] {
+	return dedupeArgs(args.map(arg => {
+		if (arg === '--fingerprint-platform=mac') return '--fingerprint-platform=macos'
+		return arg
+	}))
+}
+
+export function withoutDisabledSpoofingFeature(args: string[] | undefined, feature: string): string[] {
+	return setDisabledSpoofingFeature(args, feature, false)
+}
+
+export function hasDisabledSpoofingFeature(args: string[] | undefined, feature: string): boolean {
+	const normalizedFeature = feature.trim().toLowerCase()
+	return (args ?? []).some(arg => arg.startsWith('--disable-spoofing=') && arg
+		.slice('--disable-spoofing='.length)
+		.split(',')
+		.some(item => item.trim().toLowerCase() === normalizedFeature))
+}
+
+export function setDisabledSpoofingFeature(args: string[] | undefined, feature: string, disabled: boolean): string[] {
+	const normalizedFeature = feature.trim().toLowerCase()
+	const otherArgs: string[] = []
+	const tokens: string[] = []
+	const seen = new Set<string>()
+
+	for (const arg of args ?? []) {
+		if (!arg.startsWith('--disable-spoofing=')) {
+			otherArgs.push(arg)
+			continue
+		}
+		for (const rawToken of arg.slice('--disable-spoofing='.length).split(',')) {
+			const token = rawToken.trim()
+			const normalizedToken = token.toLowerCase()
+			if (!token || normalizedToken === normalizedFeature || seen.has(normalizedToken)) continue
+			seen.add(normalizedToken)
+			tokens.push(token)
+		}
+	}
+
+	if (disabled && normalizedFeature && !seen.has(normalizedFeature)) tokens.push(feature.trim())
+	return tokens.length > 0 ? [...otherArgs, `--disable-spoofing=${tokens.join(',')}`] : otherArgs
+}
+
+const LEGACY_GPU_ARG_KEYS = new Set([
+	'--fingerprint-gpu-vendor',
+	'--fingerprint-gpu-renderer',
+	'--fingerprint-webgl-vendor',
+	'--fingerprint-webgl-renderer',
+	'--disable-gpu-fingerprint',
+])
+
+export function withoutLegacyGpuArgs(args: string[] | undefined): string[] {
+	const filtered = (args ?? []).filter(arg => !LEGACY_GPU_ARG_KEYS.has(arg.split('=', 1)[0].toLowerCase()))
+	return withoutDisabledSpoofingFeature(filtered, 'gpu')
 }
 
 // string[] → FingerprintConfig
@@ -183,192 +230,86 @@ export interface FingerprintPreset {
   config: Partial<FingerprintConfig>
 }
 
-export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
-  {
-    id: 'win-chrome-office',
-    name: 'Windows / Chrome / 办公',
-    description: '模拟国内办公室 Windows 用户，中文环境，1920x1080',
-    config: {
-      brand: 'Chrome',
-      platform: 'windows',
-      lang: 'zh-CN',
-      timezone: 'Asia/Shanghai',
-      resolution: '1920,1080',
-      colorDepth: '24',
-      hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Intel',
-      webglRenderer: 'Intel(R) UHD Graphics 630',
-      fonts: 'Arial,Microsoft YaHei,SimSun,SimHei,Helvetica,Times New Roman',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'win-chrome-gaming',
-    name: 'Windows / Chrome / 游戏主机',
-    description: '模拟高配游戏 PC，NVIDIA 显卡，2560x1440',
-    config: {
-      brand: 'Chrome',
-      platform: 'windows',
-      lang: 'en-US',
-      timezone: 'America/New_York',
-      resolution: '2560,1440',
-      colorDepth: '24',
-      hardwareConcurrency: '16',
-      deviceMemory: '16',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'NVIDIA',
-      webglRenderer: 'NVIDIA GeForce RTX 3080',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Verdana',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'mac-chrome-designer',
-    name: 'macOS / Chrome / 设计师',
-    description: '模拟 Mac 设计师用户，Apple GPU，Retina 分辨率',
-    config: {
-      brand: 'Chrome',
-		platform: 'macos',
-      lang: 'zh-CN',
-      timezone: 'Asia/Shanghai',
-      resolution: '2560,1440',
-      colorDepth: '30',
-      hardwareConcurrency: '10',
-      deviceMemory: '16',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Apple',
-      webglRenderer: 'Apple M2',
-      fonts: 'Arial,Helvetica,PingFang SC,Hiragino Sans GB,STHeiti,Times New Roman',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: true,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'win-edge-enterprise',
-    name: 'Windows / Edge / 企业',
-    description: '模拟企业 Windows 用户，Edge 浏览器，标准配置',
-    config: {
-      brand: 'Edge',
-      platform: 'windows',
-      lang: 'zh-CN',
-      timezone: 'Asia/Shanghai',
-      resolution: '1366,768',
-      colorDepth: '24',
-      hardwareConcurrency: '4',
-      deviceMemory: '4',
-      canvasNoise: true,
-      audioNoise: false,
-      webglVendor: 'Intel',
-      webglRenderer: 'Intel(R) HD Graphics 520',
-      fonts: 'Arial,Microsoft YaHei,Calibri,Segoe UI,Times New Roman',
-      webrtcPolicy: 'default_public_interface_only',
-      doNotTrack: false,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'win-chrome-us-user',
-    name: 'Windows / Chrome / 美国用户',
-    description: '模拟美国普通用户，英文环境，AMD 显卡',
-    config: {
-      brand: 'Chrome',
-      platform: 'windows',
-      lang: 'en-US',
-      timezone: 'America/Los_Angeles',
-      resolution: '1920,1080',
-      colorDepth: '24',
-      hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'AMD',
-      webglRenderer: 'AMD Radeon RX 6600',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Georgia',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'mac-safari-jp',
-    name: 'macOS / Safari / 日本用户',
-    description: '模拟日本 Mac 用户，Safari 风格，日语环境',
-    config: {
-      brand: 'Safari',
-      platform: 'mac',
-      lang: 'ja-JP',
-      timezone: 'Asia/Tokyo',
-      resolution: '1440,900',
-      colorDepth: '24',
-      hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Apple',
-      webglRenderer: 'Apple M1',
-      fonts: 'Arial,Helvetica,Hiragino Kaku Gothic ProN,Yu Gothic,Times New Roman',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: true,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'win-chrome-uk-office',
-    name: 'Windows / Chrome / 英国-办公',
-    description: '模拟英国办公室 Windows 用户，英文环境 (en-GB)',
-    config: {
-      brand: 'Chrome',
-      platform: 'windows',
-      lang: 'en-GB',
-      timezone: 'Europe/London',
-      resolution: '1920,1080',
-      colorDepth: '24',
-      hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Intel',
-      webglRenderer: 'Intel(R) UHD Graphics 630',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Verdana',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
-    },
-  },
-  {
-    id: 'mac-chrome-us-edu',
-    name: 'macOS / Chrome / 美国-教育',
-    description: '模拟美国大学教育网 Mac 用户，英文环境 (en-US)',
-    config: {
-      brand: 'Chrome',
-      platform: 'mac',
-      lang: 'en-US',
-      timezone: 'America/New_York',
-      resolution: '1440,900',
-      colorDepth: '24',
-      hardwareConcurrency: '8',
-      deviceMemory: '8',
-      canvasNoise: true,
-      audioNoise: true,
-      webglVendor: 'Apple',
-      webglRenderer: 'Apple M1',
-      fonts: 'Arial,Helvetica,Times New Roman,Courier New,Georgia',
-      webrtcPolicy: 'disable_non_proxied_udp',
-      doNotTrack: false,
-      touchPoints: '0',
-    },
-  },
+const COMMON_WINDOWS_FONTS = 'Arial,Segoe UI,Microsoft YaHei,Calibri,Times New Roman'
+const COMMON_MAC_FONTS = 'Arial,Helvetica,PingFang SC,Hiragino Sans,Times New Roman'
+const COMMON_LINUX_FONTS = 'Arial,Noto Sans,DejaVu Sans,Liberation Sans,Times New Roman'
+
+const BUILTIN_FINGERPRINT_PRESETS: FingerprintPreset[] = [
+	{
+		id: 'win-chrome-cn-office', name: 'Windows / 中文办公', description: '中文办公环境，标准全高清窗口与常见硬件配置',
+		config: { brand: 'Chrome', platform: 'windows', lang: 'zh-CN', timezone: 'Asia/Shanghai', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_WINDOWS_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'win-chrome-high-performance', name: 'Windows / 高性能', description: '高性能桌面环境，2K 窗口与较高 CPU、内存参数',
+		config: { brand: 'Chrome', platform: 'windows', lang: 'en-US', timezone: 'America/Los_Angeles', resolution: '2560,1440', colorDepth: '24', hardwareConcurrency: '16', deviceMemory: '16', canvasNoise: true, audioNoise: true, fonts: COMMON_WINDOWS_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'win-edge-enterprise', name: 'Windows / Edge 企业', description: '企业办公环境，Edge 品牌与标准桌面参数',
+		config: { brand: 'Edge', platform: 'windows', lang: 'zh-CN', timezone: 'Asia/Shanghai', resolution: '1366,768', colorDepth: '24', hardwareConcurrency: '4', deviceMemory: '4', canvasNoise: true, audioNoise: false, fonts: COMMON_WINDOWS_FONTS, webrtcPolicy: 'default_public_interface_only', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'win-chrome-us-daily', name: 'Windows / 美国日常', description: '美国日常使用环境，美西时区与常见桌面参数',
+		config: { brand: 'Chrome', platform: 'windows', lang: 'en-US', timezone: 'America/Los_Angeles', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_WINDOWS_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'win-chrome-uk-office', name: 'Windows / 英国办公', description: '英国办公环境，英语与伦敦时区',
+		config: { brand: 'Chrome', platform: 'windows', lang: 'en-GB', timezone: 'Europe/London', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_WINDOWS_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'win-chrome-jp-office', name: 'Windows / 日本办公', description: '日本办公环境，日语与东京时区',
+		config: { brand: 'Chrome', platform: 'windows', lang: 'ja-JP', timezone: 'Asia/Tokyo', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: 'Arial,Segoe UI,Yu Gothic,Meiryo,Times New Roman', webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'win-chrome-in-office', name: 'Windows / 印度办公', description: '印度办公环境，英语与加尔各答时区',
+		config: { brand: 'Chrome', platform: 'windows', lang: 'en-IN', timezone: 'Asia/Kolkata', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_WINDOWS_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'mac-chrome-cn-creative', name: 'macOS / 中文创意工作', description: '中文创意工作环境，Retina 比例窗口与较高色深',
+		config: { brand: 'Chrome', platform: 'macos', lang: 'zh-CN', timezone: 'Asia/Shanghai', resolution: '2560,1440', colorDepth: '30', hardwareConcurrency: '10', deviceMemory: '16', canvasNoise: true, audioNoise: true, fonts: COMMON_MAC_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: true, touchPoints: '0' },
+	},
+	{
+		id: 'mac-chrome-jp-daily', name: 'macOS / 日本日常', description: '日本日常使用环境，日语与东京时区',
+		config: { brand: 'Chrome', platform: 'macos', lang: 'ja-JP', timezone: 'Asia/Tokyo', resolution: '1440,900', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: 'Arial,Helvetica,Hiragino Sans,Yu Gothic,Times New Roman', webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: true, touchPoints: '0' },
+	},
+	{
+		id: 'mac-chrome-us-education', name: 'macOS / 美国教育', description: '美国教育场景，英语与美东时区',
+		config: { brand: 'Chrome', platform: 'macos', lang: 'en-US', timezone: 'America/New_York', resolution: '1440,900', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_MAC_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'mac-chrome-uk-office', name: 'macOS / 英国办公', description: '英国办公环境，英语与伦敦时区',
+		config: { brand: 'Chrome', platform: 'macos', lang: 'en-GB', timezone: 'Europe/London', resolution: '1440,900', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_MAC_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: false, touchPoints: '0' },
+	},
+	{
+		id: 'linux-chrome-cn-development', name: 'Linux / 中文开发', description: '中文开发环境，常见桌面分辨率与开发字体',
+		config: { brand: 'Chrome', platform: 'linux', lang: 'zh-CN', timezone: 'Asia/Shanghai', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '8', deviceMemory: '8', canvasNoise: true, audioNoise: true, fonts: COMMON_LINUX_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: true, touchPoints: '0' },
+	},
+	{
+		id: 'linux-chrome-us-development', name: 'Linux / 美国开发', description: '美国开发环境，英语与美西时区',
+		config: { brand: 'Chrome', platform: 'linux', lang: 'en-US', timezone: 'America/Los_Angeles', resolution: '1920,1080', colorDepth: '24', hardwareConcurrency: '12', deviceMemory: '16', canvasNoise: true, audioNoise: true, fonts: COMMON_LINUX_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: true, touchPoints: '0' },
+	},
+	{
+		id: 'linux-chrome-de-workstation', name: 'Linux / 德国工作站', description: '德国工作站环境，德语与柏林时区',
+		config: { brand: 'Chrome', platform: 'linux', lang: 'de-DE', timezone: 'Europe/Berlin', resolution: '2560,1440', colorDepth: '24', hardwareConcurrency: '16', deviceMemory: '16', canvasNoise: true, audioNoise: true, fonts: COMMON_LINUX_FONTS, webrtcPolicy: 'disable_non_proxied_udp', doNotTrack: true, touchPoints: '0' },
+	},
 ]
+
+export function isGpuNeutralPreset(preset: FingerprintPreset): boolean {
+	const { config } = preset
+	if (config.webglVendor || config.webglRenderer) return false
+	if (hasDisabledSpoofingFeature(config.unknownArgs, 'gpu')) return false
+	return !(config.unknownArgs ?? []).some(arg => LEGACY_GPU_ARG_KEYS.has(arg.split('=', 1)[0].toLowerCase()))
+}
+
+function isCompletePreset(preset: FingerprintPreset): boolean {
+	return Boolean(preset.id && preset.name && preset.config.platform && preset.config.lang && preset.config.timezone)
+}
+
+const seenPresetIds = new Set<string>()
+export const FINGERPRINT_PRESETS: FingerprintPreset[] = BUILTIN_FINGERPRINT_PRESETS.filter(preset => {
+	if (!isCompletePreset(preset) || !isGpuNeutralPreset(preset) || seenPresetIds.has(preset.id)) return false
+	seenPresetIds.add(preset.id)
+	return true
+})
 
 export function applyLocaleToFingerprintArgs(args: string[], lang: string, timezone: string): string[] {
   const nextConfig = deserialize(args || [])

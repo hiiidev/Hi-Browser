@@ -95,6 +95,18 @@ func (m *Manager) Restore(profileId string) (*Profile, error) {
 	profile.DeletedAt = ""
 	profile.UpdatedAt = time.Now().Format(time.RFC3339)
 	profile.CoreId = normalizeProfileCoreID(profile.CoreId)
+	badge, color, err := m.normalizeProfileIconBadgeInputLocked(profile.IconBadge, profile.IconBadgeColor, profile.ProfileId)
+	if err != nil {
+		badge, color, err = m.normalizeProfileIconBadgeInputLocked("", "", profile.ProfileId)
+		if err != nil {
+			return nil, err
+		}
+	}
+	profile.IconBadge = badge
+	profile.IconBadgeColor = color
+	if err := m.ProfileDAO.Upsert(profile); err != nil {
+		return nil, err
+	}
 	m.Profiles[profile.ProfileId] = profile
 	log.Info("实例已从回收站恢复", logger.F("profile_id", profileId))
 	return profile, nil
@@ -169,7 +181,7 @@ func (m *Manager) deleteProfileRelatedDataLocked(log *logger.Logger, profile *Pr
 	}
 	var firstErr error
 	if m.CodeProvider != nil {
-		if err := m.CodeProvider.Remove(profile.ProfileId); err != nil && firstErr == nil {
+		if err := m.CodeProvider.Remove(profile.ProfileId); err != nil {
 			firstErr = err
 		}
 	}
@@ -194,7 +206,35 @@ func (m *Manager) deleteProfileRelatedDataLocked(log *logger.Logger, profile *Pr
 			firstErr = err
 		}
 	}
+	if err := m.deleteProfileBrowserIconCache(profile.ProfileId); err != nil {
+		log.Error("删除实例系统图标缓存失败", logger.F("profile_id", profile.ProfileId), logger.F("error", err))
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := cleanupPlatformProfilePreferences(profile.ProfileId); err != nil {
+		log.Error("删除实例 macOS 语言偏好失败", logger.F("profile_id", profile.ProfileId), logger.F("error", err))
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
 	return firstErr
+}
+
+func (m *Manager) deleteProfileBrowserIconCache(profileID string) error {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil
+	}
+	cacheRoot := m.ResolveRelativePath(filepath.Join("data", "cache", "profile-browser-icons"))
+	target := filepath.Join(cacheRoot, profileID)
+	if samePath(target, cacheRoot) || !isPathInside(target, cacheRoot) {
+		return nil
+	}
+	if err := os.RemoveAll(target); err != nil {
+		return fmt.Errorf("删除实例系统图标缓存失败: %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) deleteProfileSnapshotDir(profileId string) error {

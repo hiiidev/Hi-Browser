@@ -24,6 +24,14 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 		log.Error("代理绑定失败", logger.F("profile_id", profileId), logger.F("proxy_id", strings.TrimSpace(input.ProxyId)), logger.F("error", err.Error()))
 		return nil, err
 	}
+	iconBadge := profile.IconBadge
+	iconBadgeColor := profile.IconBadgeColor
+	if strings.TrimSpace(input.IconBadge) != "" || strings.TrimSpace(input.IconBadgeColor) != "" || iconBadge == "" {
+		iconBadge, iconBadgeColor, err = m.normalizeProfileIconBadgeInputLocked(input.IconBadge, input.IconBadgeColor, profileId)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	profile.ProfileName = input.ProfileName
 	profile.UserDataDir = input.UserDataDir
@@ -48,6 +56,8 @@ func (m *Manager) Update(profileId string, input ProfileInput) (*Profile, error)
 	profile.Tags = input.Tags
 	profile.Keywords = append([]string{}, input.Keywords...)
 	profile.GroupId = buildProfileGroupID(input.GroupId)
+	profile.IconBadge = iconBadge
+	profile.IconBadgeColor = iconBadgeColor
 	profile.UpdatedAt = time.Now().Format(time.RFC3339)
 
 	log.Info("浏览器配置更新", logger.F("profile_id", profileId), logger.F("profile_name", input.ProfileName))

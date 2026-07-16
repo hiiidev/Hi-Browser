@@ -78,6 +78,10 @@ func (m *Manager) copyProfile(profileId string, newName string, fingerprintResol
 	if profileName == "" {
 		profileName = buildProfileCopyName(src.ProfileName, now)
 	}
+	iconBadge, iconBadgeColor, err := m.normalizeProfileIconBadgeInputLocked("", "", newId)
+	if err != nil {
+		return nil, err
+	}
 
 	profile := &Profile{
 		ProfileId:          newId,
@@ -95,6 +99,8 @@ func (m *Manager) copyProfile(profileId string, newName string, fingerprintResol
 		Tags:               append([]string{}, src.Tags...),
 		Keywords:           append([]string{}, src.Keywords...),
 		GroupId:            src.GroupId,
+		IconBadge:          iconBadge,
+		IconBadgeColor:     iconBadgeColor,
 		Running:            false,
 		DebugPort:          0,
 		Pid:                0,
@@ -336,8 +342,6 @@ func copyAutomationTargetArgPrefixes() map[string][]string {
 		},
 		copyAutomationTargetRender: {
 			"--fingerprint-canvas-noise",
-			"--fingerprint-webgl-vendor",
-			"--fingerprint-webgl-renderer",
 			"--fingerprint-audio-noise",
 		},
 		copyAutomationTargetFonts: {

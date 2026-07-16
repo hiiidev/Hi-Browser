@@ -10,31 +10,50 @@ type FingerprintCapabilities struct {
 	ChromiumMajor         int      `json:"chromiumMajor"`
 	HostPlatform          string   `json:"hostPlatform"`
 	TargetPlatform        string   `json:"targetPlatform"`
+	SupportedBrands       []string `json:"supportedBrands"`
 	SupportedParameters   []string `json:"supportedParameters"`
 	DeprecatedParameters  []string `json:"deprecatedParameters"`
 	UnsupportedParameters []string `json:"unsupportedParameters"`
 	Warnings              []string `json:"warnings"`
 	GPUSpoofingMode       string   `json:"gpuSpoofingMode"`
+	ManualGPUConfig       bool     `json:"manualGpuConfig"`
+	WebpageLanguage       bool     `json:"webpageLanguage"`
+	ApplicationLocaleMode string   `json:"applicationLocaleMode"`
+	IntlLocaleMode        string   `json:"intlLocaleMode"`
+	TTSVoicesMode         string   `json:"ttsVoicesMode"`
+	FontsMode             string   `json:"fontsMode"`
 }
 
 func Capabilities(provider, version, hostPlatform, targetPlatform string) FingerprintCapabilities {
 	major := ChromiumMajor(version)
+	hostPlatform = NormalizePlatform(hostPlatform)
 	targetPlatform = NormalizePlatform(targetPlatform)
+	if targetPlatform == "" {
+		targetPlatform = hostPlatform
+	}
 	c := FingerprintCapabilities{
-		Provider: provider, ChromiumMajor: major, HostPlatform: NormalizePlatform(hostPlatform), TargetPlatform: targetPlatform,
-		SupportedParameters: []string{"--fingerprint", "--fingerprint-brand", "--fingerprint-platform", "--lang", "--accept-lang", "--timezone", "--window-size"},
-		GPUSpoofingMode:     "legacy-vendor-renderer",
+		Provider:              provider,
+		ChromiumMajor:         major,
+		HostPlatform:          hostPlatform,
+		TargetPlatform:        targetPlatform,
+		SupportedBrands:       []string{"Chrome", "Edge", "Opera", "Vivaldi", "Firefox", "Safari"},
+		SupportedParameters:   []string{"--fingerprint", "--fingerprint-brand", "--fingerprint-platform", "--lang", "--accept-lang", "--timezone", "--window-size"},
+		GPUSpoofingMode:       "legacy-vendor-renderer",
+		ManualGPUConfig:       true,
+		WebpageLanguage:       true,
+		ApplicationLocaleMode: "chromium",
+		IntlLocaleMode:        "chromium",
+		TTSVoicesMode:         "host",
+		FontsMode:             "host",
 	}
 	if major >= 144 {
-		c.DeprecatedParameters = []string{"--fingerprint-gpu-vendor", "--fingerprint-gpu-renderer", "--disable-gpu-fingerprint"}
+		c.DeprecatedParameters = []string{"--fingerprint-gpu-vendor", "--fingerprint-gpu-renderer", "--fingerprint-webgl-vendor", "--fingerprint-webgl-renderer", "--disable-gpu-fingerprint"}
 		c.UnsupportedParameters = append([]string(nil), c.DeprecatedParameters...)
 		c.SupportedParameters = append(c.SupportedParameters, "--disable-spoofing=gpu")
-		c.GPUSpoofingMode = "kernel-policy"
+		c.GPUSpoofingMode = "seed-driven-real-parameter-set"
+		c.ManualGPUConfig = false
 	} else {
-		c.SupportedParameters = append(c.SupportedParameters, "--fingerprint-gpu-vendor", "--fingerprint-gpu-renderer", "--disable-gpu-fingerprint")
-	}
-	if c.HostPlatform != "" && targetPlatform != "" && c.HostPlatform != targetPlatform {
-		c.Warnings = append(c.Warnings, "模拟平台与宿主平台不同，字体、GPU、系统 API 可能出现一致性风险")
+		c.SupportedParameters = append(c.SupportedParameters, "--fingerprint-gpu-vendor", "--fingerprint-gpu-renderer", "--fingerprint-webgl-vendor", "--fingerprint-webgl-renderer", "--disable-gpu-fingerprint")
 	}
 	return c
 }

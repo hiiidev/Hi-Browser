@@ -42,6 +42,8 @@ let mockProfiles: BrowserProfile[] = [
     launchArgs: ['--disable-features=Translate'],
     tags: ['默认'],
     keywords: [],
+    iconBadge: '01',
+    iconBadgeColor: '#2563EB',
     running: false,
     debugPort: 0,
     debugReady: false,

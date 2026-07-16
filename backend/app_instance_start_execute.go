@@ -45,14 +45,16 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 	for attempt := 1; attempt <= plan.maxStartAttempts; attempt++ {
 		stableDebugPort, readyErr := waitBrowserDebugPortStable(plan.assignedDebugPort, plan.userDataDir, plan.startReadyTimeout, plan.startStableWindow, monitor)
 		if readyErr == nil {
-			a.markProfileRunningLocked(input.ProfileID, profile, cmd, cmd.Process.Pid, stableDebugPort, true, "")
+			iconWarning := a.applyProfileBrowserTaskbarIcon(profile, cmd.Process.Pid)
+			runtimeWarning := combineRuntimeWarnings(plan.compatibilityWarning, iconWarning)
+			a.markProfileRunningLocked(input.ProfileID, profile, cmd, cmd.Process.Pid, stableDebugPort, true, runtimeWarning)
 			if plan.acquiredProxyBridge.valid() {
 				a.bindProfileProxyBridge(input.ProfileID, plan.acquiredProxyBridge)
 				plan.releaseProxyBridge = false
 			}
 			if len(plan.deferredStartTargets) > 0 {
 				if err := openBrowserStartTargets(stableDebugPort, plan.deferredStartTargets); err != nil {
-					warning := deferredStartTargetsWarning(plan.deferredStartTargets, err)
+					warning := combineRuntimeWarnings(runtimeWarning, deferredStartTargetsWarning(plan.deferredStartTargets, err))
 					profile.RuntimeWarning = warning
 					profile.LastError = ""
 					log.Warn("浏览器已就绪，但启动页延后打开失败",
@@ -109,7 +111,8 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 
 	pendingStartNotice := ""
 	if shouldKeepBrowserRunningPendingDebugReady(plan.assignedDebugPort, monitor) {
-		runtimeWarning := browserDebugPendingWarning(plan.totalReadyTimeout)
+		iconWarning := a.applyProfileBrowserTaskbarIcon(profile, cmd.Process.Pid)
+		runtimeWarning := combineRuntimeWarnings(plan.compatibilityWarning, iconWarning, browserDebugPendingWarning(plan.totalReadyTimeout))
 		pendingStartNotice = browserDebugPendingStartNotice(plan.totalReadyTimeout)
 		a.markProfileRunningLocked(input.ProfileID, profile, cmd, cmd.Process.Pid, plan.assignedDebugPort, false, runtimeWarning)
 		if len(plan.deferredStartTargets) > 0 {
@@ -147,4 +150,14 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 	startErr := fmt.Errorf("实例启动失败：浏览器在等待窗口内仍未就绪")
 	profile.LastError = startErr.Error()
 	return profile, startErr
+}
+
+func combineRuntimeWarnings(warnings ...string) string {
+	items := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		if value := strings.TrimSpace(warning); value != "" {
+			items = append(items, value)
+		}
+	}
+	return strings.Join(items, "；")
 }

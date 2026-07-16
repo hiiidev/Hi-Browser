@@ -36,12 +36,12 @@ func ClearSessionRestoreData(userDataDir string) error {
 	if _, statErr := os.Stat(sessionsDir); statErr == nil {
 		if err := os.RemoveAll(sessionsDir); err != nil && !os.IsNotExist(err) {
 			errs = append(errs, fmt.Errorf("remove sessions dir: %w", err))
-		} else if err == nil {
+		} else {
 			if mkErr := os.MkdirAll(sessionsDir, 0o755); mkErr != nil {
 				errs = append(errs, fmt.Errorf("recreate sessions dir: %w", mkErr))
 			}
 		}
-	} else if statErr != nil && !os.IsNotExist(statErr) {
+	} else if !os.IsNotExist(statErr) {
 		errs = append(errs, fmt.Errorf("stat sessions dir: %w", statErr))
 	}
 

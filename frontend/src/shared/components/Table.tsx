@@ -26,6 +26,7 @@ interface TableProps<T> {
   emptyText?: string
   onRowClick?: (record: T) => void
   className?: string
+  tableClassName?: string
   maxHeight?: string  // 表格最大高度，默认 'calc(100vh - 320px)'
   stickyHeader?: boolean  // 是否固定表头，默认 true
   onSort?: (sorterResult: SorterResult) => void // 排序变化回调
@@ -41,6 +42,7 @@ export function Table<T extends Record<string, any>>({
   emptyText = '暂无数据',
   onRowClick,
   className,
+  tableClassName,
   maxHeight = 'calc(100vh - 320px)',
   stickyHeader = true,
   onSort,
@@ -103,7 +105,7 @@ export function Table<T extends Record<string, any>>({
       className={clsx('overflow-auto', className)}
       style={{ maxHeight }}
     >
-      <table className="min-w-full">
+      <table className={clsx('min-w-full', tableClassName)}>
         <thead className={clsx(stickyHeader && 'sticky top-0 z-10')}>
           <tr>
             {columns.map((col) => (

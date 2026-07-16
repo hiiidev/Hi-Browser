@@ -1,20 +1,26 @@
 ﻿import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, RefreshCw, Wand2 } from 'lucide-react'
 import { ConfirmModal, FormItem, Input, Select, Textarea } from '../../../shared/components'
+import { normalizeFingerprintArgs } from '../api/cores'
+import type { FingerprintArgResult } from '../types'
 import {
   type FingerprintConfig,
   FINGERPRINT_PRESETS,
   PRESET_RESOLUTIONS,
   deserialize,
   getSystemTimezone,
-  randomFingerprintSeed,
-  serialize,
+	randomFingerprintSeed,
+	serialize,
 	applyFingerprintCapabilities,
+	hasDisabledSpoofingFeature,
+	setDisabledSpoofingFeature,
+	withoutLegacyGpuArgs,
 } from '../utils/fingerprintSerializer'
 
 interface FingerprintPanelProps {
   value: string[]
   onChange: (args: string[]) => void
+	coreId?: string
 	chromiumMajor?: number
 }
 
@@ -22,9 +28,20 @@ const BRAND_OPTIONS = [
   { value: '', label: '不设置' },
   { value: 'Chrome', label: 'Chrome' },
   { value: 'Edge', label: 'Edge' },
-  { value: 'Firefox', label: 'Firefox' },
-  { value: 'Safari', label: 'Safari' },
+	{ value: 'Opera', label: 'Opera' },
+	{ value: 'Vivaldi', label: 'Vivaldi' },
+	{ value: 'Firefox', label: 'Firefox' },
+	{ value: 'Safari', label: 'Safari' },
+	{ value: 'custom', label: '自定义品牌...' },
 ]
+
+const KNOWN_BRANDS = new Set(BRAND_OPTIONS.map(option => option.value).filter(value => value && value !== 'custom'))
+
+const SOURCE_LABELS: Record<string, string> = {
+	user: '用户配置',
+	'compatibility-migration': '兼容性迁移',
+	'core-capability-adjustment': '内核能力调整',
+}
 
 const PLATFORM_OPTIONS = [
   { value: '', label: '不设置' },
@@ -86,52 +103,28 @@ const TIMEZONE_OPTIONS = [
   { value: 'Pacific/Auckland', label: 'Pacific/Auckland (UTC+12)' },
 ]
 
+export function currentTimezoneOffsetLabel(timeZone: string, date = new Date()): string {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    }).formatToParts(date).find(item => item.type === 'timeZoneName')?.value || ''
+    const normalized = part.replace(/^GMT/, 'UTC')
+    if (normalized === 'UTC') return 'UTC+0'
+    const match = normalized.match(/^UTC([+-])(\d{2})(?::(\d{2}))?$/)
+    if (!match) return normalized || 'UTC'
+    const hours = String(Number(match[2]))
+    return `UTC${match[1]}${hours}${match[3] && match[3] !== '00' ? `:${match[3]}` : ''}`
+  } catch {
+    return 'UTC'
+  }
+}
+
 const RESOLUTION_OPTIONS = [
   { value: '', label: '不设置' },
   ...PRESET_RESOLUTIONS.map(r => ({ value: r, label: r })),
   { value: 'custom', label: '自定义...' },
 ]
-
-const WEBGL_VENDOR_OPTIONS = [
-  { value: '', label: '不设置' },
-  { value: 'Intel', label: 'Intel' },
-  { value: 'NVIDIA', label: 'NVIDIA' },
-  { value: 'AMD', label: 'AMD' },
-  { value: 'Apple', label: 'Apple' },
-]
-
-const WEBGL_RENDERER_OPTIONS: Record<string, { value: string; label: string }[]> = {
-  Intel: [
-    { value: '', label: '不设置' },
-    { value: 'Intel(R) UHD Graphics 630', label: 'UHD Graphics 630' },
-    { value: 'Intel(R) UHD Graphics 620', label: 'UHD Graphics 620' },
-    { value: 'Intel(R) HD Graphics 520', label: 'HD Graphics 520' },
-    { value: 'Intel(R) Iris(R) Xe Graphics', label: 'Iris Xe Graphics' },
-    { value: 'custom', label: '自定义...' },
-  ],
-  NVIDIA: [
-    { value: '', label: '不设置' },
-    { value: 'NVIDIA GeForce RTX 3080', label: 'GeForce RTX 3080' },
-    { value: 'NVIDIA GeForce RTX 3060', label: 'GeForce RTX 3060' },
-    { value: 'NVIDIA GeForce GTX 1660', label: 'GeForce GTX 1660' },
-    { value: 'NVIDIA GeForce GTX 1080 Ti', label: 'GeForce GTX 1080 Ti' },
-    { value: 'custom', label: '自定义...' },
-  ],
-  AMD: [
-    { value: '', label: '不设置' },
-    { value: 'AMD Radeon RX 6600', label: 'Radeon RX 6600' },
-    { value: 'AMD Radeon RX 580', label: 'Radeon RX 580' },
-    { value: 'AMD Radeon Vega 8', label: 'Radeon Vega 8' },
-    { value: 'custom', label: '自定义...' },
-  ],
-  Apple: [
-    { value: '', label: '不设置' },
-    { value: 'Apple M1', label: 'Apple M1' },
-    { value: 'Apple M2', label: 'Apple M2' },
-    { value: 'Apple M3', label: 'Apple M3' },
-    { value: 'custom', label: '自定义...' },
-  ],
-}
 
 const BOOL_OPTIONS = [
   { value: '', label: '不设置' },
@@ -186,20 +179,30 @@ const PRESET_OPTIONS = [
   ...FINGERPRINT_PRESETS.map(p => ({ value: p.id, label: p.name })),
 ]
 
-export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: FingerprintPanelProps) {
+export function FingerprintPanel({ value, onChange, coreId = '' }: FingerprintPanelProps) {
   const [config, setConfig] = useState<FingerprintConfig>(() => deserialize(value))
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [, setCustomRenderer] = useState('')
   const [confirmSeedOpen, setConfirmSeedOpen] = useState(false)
+	const [preview, setPreview] = useState<FingerprintArgResult | null>(null)
 
   useEffect(() => {
     setConfig(deserialize(value))
   }, [value.join('\n')])
 
+	useEffect(() => {
+		let cancelled = false
+		normalizeFingerprintArgs(coreId, config.platform || '', value).then(result => {
+			if (!cancelled) setPreview(result)
+		}).catch(() => {
+			if (!cancelled) setPreview(null)
+		})
+		return () => { cancelled = true }
+	}, [coreId, config.platform, value.join('\n')])
+
   const update = (patch: Partial<FingerprintConfig>) => {
-    const next = { ...config, ...patch }
+		const next = { ...config, ...patch }
     setConfig(next)
-		onChange(applyFingerprintCapabilities(serialize(next), chromiumMajor))
+		onChange(applyFingerprintCapabilities(serialize(next)))
   }
 
   const handlePresetChange = (presetId: string) => {
@@ -207,33 +210,26 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
     const preset = FINGERPRINT_PRESETS.find(p => p.id === presetId)
     if (!preset) return
     // 应用预设时自动生成新种子，保留未知参数
-    const next: FingerprintConfig = {
+		const next: FingerprintConfig = {
       ...preset.config,
       seed: randomFingerprintSeed(),
-      unknownArgs: config.unknownArgs,
+			unknownArgs: withoutLegacyGpuArgs(config.unknownArgs),
     }
     setConfig(next)
-		onChange(applyFingerprintCapabilities(serialize(next), chromiumMajor))
+		onChange(applyFingerprintCapabilities(serialize(next)))
   }
 
   const handleAdvancedChange = (text: string) => {
     const args = text.split('\n').map(s => s.trim()).filter(Boolean)
     const parsed = deserialize(args)
     setConfig(parsed)
-		onChange(applyFingerprintCapabilities(serialize(parsed), chromiumMajor))
+		onChange(applyFingerprintCapabilities(serialize(parsed)))
   }
 
-  const rendererOptions = config.webglVendor
-    ? (WEBGL_RENDERER_OPTIONS[config.webglVendor] ?? [{ value: '', label: '不设置' }, { value: 'custom', label: '自定义...' }])
-    : [{ value: '', label: '不设置' }]
-
-  const isCustomRenderer = config.webglRenderer
-    ? !rendererOptions.some(o => o.value === config.webglRenderer && o.value !== 'custom')
-    : false
-
-	const advancedText = applyFingerprintCapabilities(serialize(config), chromiumMajor).join('\n')
-	const gpuManualUnsupported = chromiumMajor >= 144
-	const hostPlatform = typeof navigator === 'undefined' ? '' : (/Mac/i.test(navigator.platform) ? 'macos' : /Win/i.test(navigator.platform) ? 'windows' : /Linux/i.test(navigator.platform) ? 'linux' : '')
+	const advancedText = (preview?.args || applyFingerprintCapabilities(serialize(config))).join('\n')
+	const brandSelectValue = config.brand && !KNOWN_BRANDS.has(config.brand) ? 'custom' : (config.brand || '')
+	const useRealGpu = hasDisabledSpoofingFeature(config.unknownArgs, 'gpu')
+	const setGpuPolicy = (realGpu: boolean) => update({ unknownArgs: setDisabledSpoofingFeature(config.unknownArgs, 'gpu', realGpu) })
 
   return (
     <div className="space-y-4">
@@ -296,23 +292,31 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">基础身份</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="浏览器品牌">
-            <Select value={config.brand ?? ''} onChange={e => update({ brand: e.target.value || undefined })} options={BRAND_OPTIONS} />
+			<Select
+				value={brandSelectValue}
+				onChange={e => update({ brand: e.target.value === 'custom' ? 'Custom' : (e.target.value || undefined) })}
+				options={BRAND_OPTIONS}
+			/>
           </FormItem>
+			{brandSelectValue === 'custom' && (
+					<FormItem label="自定义品牌">
+					<Input value={config.brand || ''} onChange={e => update({ brand: e.target.value || undefined })} placeholder="Custom" />
+				</FormItem>
+			)}
           <FormItem label="操作系统">
             <Select value={config.platform ?? ''} onChange={e => update({ platform: e.target.value || undefined })} options={PLATFORM_OPTIONS} />
           </FormItem>
-          <FormItem label="语言">
+		  <FormItem label="网页首选语言" hint="控制网页请求、navigator.language、--lang 和 --accept-lang">
             <Select value={config.lang ?? ''} onChange={e => update({ lang: e.target.value || undefined })} options={LANG_OPTIONS} />
           </FormItem>
           <FormItem label="时区">
-            <Select value={config.timezone ?? ''} onChange={e => update({ timezone: e.target.value || undefined })} options={TIMEZONE_OPTIONS.map(opt =>
-              opt.value === 'system'
-                ? { ...opt, label: `跟随系统时区 (当前: ${getSystemTimezone()})` }
-                : opt
-            )} />
+            <Select value={config.timezone ?? ''} onChange={e => update({ timezone: e.target.value || undefined })} options={TIMEZONE_OPTIONS.map(opt => {
+              if (opt.value === 'system') return { ...opt, label: `跟随系统时区 (当前: ${getSystemTimezone()})` }
+              if (!opt.value) return opt
+              return { ...opt, label: `${opt.value} (${currentTimezoneOffsetLabel(opt.value)})` }
+            })} />
           </FormItem>
-        </div>
-		{config.platform && hostPlatform && config.platform !== hostPlatform && <p className="mt-2 text-xs text-[var(--color-warning)]">模拟平台与当前宿主平台不同，字体、GPU 与系统 API 可能出现一致性风险。</p>}
+		</div>
       </div>
 
       {/* 屏幕与硬件 */}
@@ -349,39 +353,28 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
       {/* 渲染指纹 */}
       <div>
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">渲染指纹</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormItem label="WebGL 供应商">
-            <Select
-              value={config.webglVendor ?? ''}
-              onChange={e => update({ webglVendor: e.target.value || undefined, webglRenderer: undefined })}
-				options={WEBGL_VENDOR_OPTIONS}
-				disabled={gpuManualUnsupported}
-            />
-          </FormItem>
-          <FormItem label="WebGL 渲染器">
-            {isCustomRenderer ? (
-              <Input
-                value={config.webglRenderer ?? ''}
-                onChange={e => update({ webglRenderer: e.target.value || undefined })}
-                placeholder="自定义渲染器名称"
-              />
-            ) : (
-              <Select
-                value={config.webglRenderer ?? ''}
-                onChange={e => {
-                  if (e.target.value === 'custom') {
-                    setCustomRenderer('')
-                    update({ webglRenderer: undefined })
-                  } else {
-                    update({ webglRenderer: e.target.value || undefined })
-                  }
-                }}
-                options={rendererOptions}
-				disabled={!config.webglVendor || gpuManualUnsupported}
-              />
-			)}
+		<div className="space-y-4">
+		  <FormItem label="GPU 指纹策略" hint="内核自动模拟会由指纹种子稳定选择一组真实 GPU 参数；使用真实 GPU 会关闭内核的 GPU 模拟。">
+			<div className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-hover)] p-1" role="group" aria-label="GPU 指纹策略">
+			  <button
+				type="button"
+				aria-pressed={!useRealGpu}
+				onClick={() => setGpuPolicy(false)}
+				className={`min-h-11 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] ${!useRealGpu ? 'bg-[var(--color-bg-card)] text-[var(--color-text)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}
+			  >
+				内核自动模拟
+			  </button>
+			  <button
+				type="button"
+				aria-pressed={useRealGpu}
+				onClick={() => setGpuPolicy(true)}
+				className={`min-h-11 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] ${useRealGpu ? 'bg-[var(--color-bg-card)] text-[var(--color-text)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'}`}
+			  >
+				使用真实 GPU
+			  </button>
+			</div>
 		  </FormItem>
-			{gpuManualUnsupported && <p className="md:col-span-2 text-xs text-[var(--color-warning)]">不受当前 Chromium 144+ 内核支持，GPU 使用内核策略或真实 GPU；无效的旧参数不会传给浏览器。</p>}
+	        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="Canvas 噪声">
             <Select
               value={config.canvasNoise === undefined ? '' : String(config.canvasNoise)}
@@ -397,6 +390,7 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
             />
           </FormItem>
         </div>
+		</div>
       </div>
 
       {/* 网络与隐私 */}
@@ -426,13 +420,13 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
       {/* 字体 */}
       <div>
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">字体</p>
-        <FormItem label="字体列表">
+		<FormItem label="字体列表">
           <Input
             value={config.fonts ?? ''}
             onChange={e => update({ fonts: e.target.value || undefined })}
             placeholder="Arial,Helvetica,Times New Roman（逗号分隔）"
           />
-        </FormItem>
+		</FormItem>
       </div>
 
       {/* 高级模式 */}
@@ -447,7 +441,7 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
         </button>
 		{advancedOpen && (
           <div className="px-4 pb-4 pt-2 border-t border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-muted)] mb-2">每行一个参数，修改后自动同步到上方控件</p>
+			<p className="text-xs text-[var(--color-text-muted)] mb-2">每行一个参数。旧 Profile 的 GPU/WebGL 参数会在这里原样保留；应用内置预设时才会清理。</p>
             <Textarea
               value={advancedText}
               onChange={e => handleAdvancedChange(e.target.value)}
@@ -459,7 +453,17 @@ export function FingerprintPanel({ value, onChange, chromiumMajor = 0 }: Fingerp
 		</div>
 		<div className="border border-[var(--color-border)] rounded-lg p-3">
 			<p className="text-xs font-medium text-[var(--color-text-muted)] mb-2">最终启动参数</p>
-			<pre className="text-xs leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]">{advancedText || '未配置指纹参数'}</pre>
+			{preview?.warnings?.map(warning => <p key={warning} className="mb-2 text-xs text-[var(--color-warning)]">{warning}</p>)}
+			{preview?.entries?.length ? (
+				<div className="space-y-1.5">
+					{preview.entries.map(entry => (
+						<div key={entry.arg} className="flex items-start justify-between gap-3 text-xs">
+							<code className="min-w-0 break-all text-[var(--color-text-secondary)]">{entry.arg}</code>
+							<span className="shrink-0 text-[var(--color-text-muted)]">{SOURCE_LABELS[entry.source] || entry.source}</span>
+						</div>
+					))}
+				</div>
+			) : <pre className="text-xs leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]">{advancedText || '未配置指纹参数'}</pre>}
 		</div>
 	</div>
   )

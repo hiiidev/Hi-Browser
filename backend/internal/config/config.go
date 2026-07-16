@@ -209,6 +209,8 @@ type BrowserProfileConfig struct {
 	LaunchArgs         []string `yaml:"launch_args" json:"launchArgs"`
 	Tags               []string `yaml:"tags" json:"tags"`
 	Keywords           []string `yaml:"keywords,omitempty" json:"keywords,omitempty"`
+	IconBadge          string   `yaml:"icon_badge,omitempty" json:"iconBadge,omitempty"`
+	IconBadgeColor     string   `yaml:"icon_badge_color,omitempty" json:"iconBadgeColor,omitempty"`
 	CreatedAt          string   `yaml:"created_at" json:"createdAt"`
 	UpdatedAt          string   `yaml:"updated_at" json:"updatedAt"`
 }

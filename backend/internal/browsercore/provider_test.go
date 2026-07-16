@@ -105,15 +105,119 @@ func TestGitHubProviderRateLimit(t *testing.T) {
 func TestNormalizeFingerprintArgs(t *testing.T) {
 	result := NormalizeFingerprintArgs([]string{"--fingerprint-platform=mac", "--lang=en-US", "--fingerprint-gpu-vendor=AMD", "--fingerprint-gpu-renderer=X", "--lang=zh-CN"}, 144)
 	joined := strings.Join(result.Args, " ")
-	for _, want := range []string{"--fingerprint-platform=macos", "--lang=zh-CN", "--accept-lang=zh-CN,zh", "--disable-spoofing=gpu"} {
+	for _, want := range []string{"--fingerprint-platform=macos", "--lang=zh-CN", "--accept-lang=zh-CN,zh", "--fingerprint-gpu-vendor=AMD", "--fingerprint-gpu-renderer=X"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %s in %s", want, joined)
 		}
 	}
-	if strings.Contains(joined, "fingerprint-gpu") {
-		t.Fatalf("legacy gpu remains: %s", joined)
+	if strings.Contains(joined, "--disable-spoofing=gpu") {
+		t.Fatalf("unexpected GPU spoofing override: %s", joined)
 	}
 }
+
+func TestNormalizeFingerprintArgsReturnsJSONArrays(t *testing.T) {
+	result := NormalizeFingerprintArgsForCapabilities(nil, Capabilities("fingerprint-chromium", "148", "darwin", "macos"))
+	if result.Args == nil || result.Warnings == nil || result.Adjusted == nil || result.Entries == nil {
+		t.Errorf("NormalizeFingerprintArgsForCapabilities() returned nil collections: %+v", result)
+	}
+}
+
+func TestFingerprintCapabilitiesByPlatform(t *testing.T) {
+	tests := []struct {
+		name                string
+		host                string
+		target              string
+		wantManualGPU       bool
+		wantApplicationMode string
+	}{
+		{name: "macOS", host: "darwin", target: "macos", wantManualGPU: false, wantApplicationMode: "chromium"},
+		{name: "Windows", host: "windows", target: "windows", wantManualGPU: false, wantApplicationMode: "chromium"},
+		{name: "Linux", host: "linux", target: "linux", wantManualGPU: false, wantApplicationMode: "chromium"},
+		{name: "cross platform", host: "darwin", target: "windows", wantManualGPU: false, wantApplicationMode: "chromium"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			capabilities := Capabilities("fingerprint-chromium", "148.0.7778.215", test.host, test.target)
+			if capabilities.ManualGPUConfig != test.wantManualGPU {
+				t.Errorf("Capabilities().ManualGPUConfig = %v, want %v", capabilities.ManualGPUConfig, test.wantManualGPU)
+			}
+			if capabilities.ApplicationLocaleMode != test.wantApplicationMode {
+				t.Errorf("Capabilities().ApplicationLocaleMode = %q, want %q", capabilities.ApplicationLocaleMode, test.wantApplicationMode)
+			}
+			if capabilities.GPUSpoofingMode != "seed-driven-real-parameter-set" {
+				t.Errorf("Capabilities().GPUSpoofingMode = %q", capabilities.GPUSpoofingMode)
+			}
+		})
+	}
+}
+
+func TestNormalizeFingerprintArgsForCapabilities(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		caps       FingerprintCapabilities
+		want       []string
+		doNotWant  []string
+		wantAdjust string
+	}{
+		{
+			name: "macOS preserves legacy GPU parameters without enabling real GPU",
+			args: []string{
+				"--fingerprint-brand=Safari",
+				"--fingerprint-platform=mac",
+				"--lang=ja-JP",
+				"--accept-lang=zh-CN,zh",
+				"--fingerprint-webgl-vendor=Apple",
+				"--fingerprint-webgl-renderer=Apple M1",
+			},
+			caps:      Capabilities("fingerprint-chromium", "148.0.7778.215", "darwin", "macos"),
+			want:      []string{"--fingerprint-brand=Safari", "--fingerprint-platform=macos", "--lang=ja-JP", "--accept-lang=ja-JP,ja", "--fingerprint-webgl-vendor=Apple", "--fingerprint-webgl-renderer=Apple M1"},
+			doNotWant: []string{"--disable-spoofing=gpu", "zh-CN"},
+		},
+		{
+			name:      "Linux preserves legacy WebGL metadata",
+			args:      []string{"--fingerprint-brand=Chrome", "--fingerprint-platform=linux", "--fingerprint-webgl-vendor=Intel", "--fingerprint-webgl-renderer=Intel Iris"},
+			caps:      Capabilities("fingerprint-chromium", "148.0.7778.215", "linux", "linux"),
+			want:      []string{"--fingerprint-webgl-vendor=Intel", "--fingerprint-webgl-renderer=Intel Iris"},
+			doNotWant: []string{"--disable-spoofing=gpu"},
+		},
+		{
+			name:      "real GPU policy preserves other disabled spoofing tokens",
+			args:      []string{"--fingerprint=42", "--disable-spoofing=font,audio,gpu"},
+			caps:      Capabilities("fingerprint-chromium", "148", "darwin", "macos"),
+			want:      []string{"--fingerprint=42", "--disable-spoofing=font,audio,gpu"},
+			doNotWant: []string{"--fingerprint-webgl-vendor", "--fingerprint-webgl-renderer"},
+		},
+		{
+			name:      "duplicate parameters keep last value",
+			args:      []string{"--lang=en-US", "--lang=ja-JP", "--accept-lang=ja-JP,ja"},
+			caps:      Capabilities("fingerprint-chromium", "148", "linux", "linux"),
+			want:      []string{"--lang=ja-JP", "--accept-lang=ja-JP,ja"},
+			doNotWant: []string{"--lang=en-US"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := NormalizeFingerprintArgsForCapabilities(test.args, test.caps)
+			joined := strings.Join(result.Args, " ")
+			for _, value := range test.want {
+				if !strings.Contains(joined, value) {
+					t.Errorf("NormalizeFingerprintArgsForCapabilities() = %q, want to contain %q", joined, value)
+				}
+			}
+			for _, value := range test.doNotWant {
+				if strings.Contains(joined, value) {
+					t.Errorf("NormalizeFingerprintArgsForCapabilities() = %q, do not want %q", joined, value)
+				}
+			}
+			if test.wantAdjust != "" && !strings.Contains(strings.Join(result.Adjusted, " "), test.wantAdjust) {
+				t.Errorf("NormalizeFingerprintArgsForCapabilities().Adjusted = %q, want %q", result.Adjusted, test.wantAdjust)
+			}
+		})
+	}
+}
+
 func TestParseSHA256Checksum(t *testing.T) {
 	sum := strings.Repeat("a", 64)
 	got, err := ParseSHA256Checksum(sum+"  core.zip\n", "core.zip")

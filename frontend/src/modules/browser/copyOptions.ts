@@ -16,7 +16,7 @@ export const BROWSER_PROFILE_AUTOMATION_TARGET_OPTIONS: BrowserProfileAutomation
   { value: 'locale', label: '语言与时区', detail: '语言 / 时区' },
   { value: 'screen', label: '屏幕参数', detail: '分辨率 / 色深' },
   { value: 'hardware', label: '硬件参数', detail: 'CPU / 内存' },
-  { value: 'render', label: '渲染特征', detail: 'Canvas / WebGL' },
+  { value: 'render', label: '渲染特征', detail: 'Canvas / Audio' },
   { value: 'fonts', label: '字体', detail: '字体列表' },
   { value: 'network', label: '网络隐私', detail: 'WebRTC / DNT' },
   { value: 'devices', label: '设备数量', detail: '媒体设备 / 触摸点' },
@@ -30,8 +30,6 @@ export const BROWSER_PROFILE_AUTOMATION_TARGET_PREFIXES: Record<BrowserProfileAu
   hardware: ['--fingerprint-hardware-concurrency', '--fingerprint-device-memory'],
   render: [
     '--fingerprint-canvas-noise',
-    '--fingerprint-webgl-vendor',
-    '--fingerprint-webgl-renderer',
     '--fingerprint-audio-noise',
   ],
   fonts: ['--fingerprint-fonts'],

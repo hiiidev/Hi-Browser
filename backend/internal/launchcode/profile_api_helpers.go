@@ -38,6 +38,8 @@ func normalizeProfileInput(input browser.ProfileInput) browser.ProfileInput {
 		Tags:            normalizeStringSlice(input.Tags),
 		Keywords:        normalizeStringSlice(input.Keywords),
 		GroupId:         strings.TrimSpace(input.GroupId),
+		IconBadge:       strings.TrimSpace(input.IconBadge),
+		IconBadgeColor:  strings.TrimSpace(input.IconBadgeColor),
 	}
 }
 
@@ -56,6 +58,8 @@ func profileToInput(profile *browser.Profile) browser.ProfileInput {
 		Tags:            append([]string{}, profile.Tags...),
 		Keywords:        append([]string{}, profile.Keywords...),
 		GroupId:         strings.TrimSpace(profile.GroupId),
+		IconBadge:       strings.TrimSpace(profile.IconBadge),
+		IconBadgeColor:  strings.TrimSpace(profile.IconBadgeColor),
 	}
 }
 

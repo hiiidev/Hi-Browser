@@ -60,12 +60,11 @@ func resolveImportedLocalModule(importerPath string, specifier string, fileIndex
 		return "", fmt.Errorf("本地依赖 %q 超出了脚本包范围", specifier)
 	}
 
-	if resolved, err := resolveImportedLocalCandidate(candidate, fileIndex); err == nil {
+	resolved, err := resolveImportedLocalCandidate(candidate, fileIndex)
+	if err == nil {
 		return resolved, nil
-	} else if err != nil {
-		return "", fmt.Errorf("本地依赖 %q 无法解析: %w", specifier, err)
 	}
-	return "", fmt.Errorf("本地依赖 %q 无法解析", specifier)
+	return "", fmt.Errorf("本地依赖 %q 无法解析: %w", specifier, err)
 }
 
 func resolveImportedLocalCandidate(candidate string, fileIndex map[string][]byte) (string, error) {

@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FolderOpen, Layers } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
-import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup, ProxyLocationResolveResult } from '../types'
-import { browserProxyResolveLocation, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
+import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup, FingerprintArgResult, ProxyLocationResolveResult } from '../types'
+import { browserProxyResolveLocation, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, normalizeFingerprintArgs, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
 import { applyLocaleToFingerprintArgs } from '../utils/fingerprintSerializer'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
+import { ProfileIconBadge } from '../components/ProfileIconBadge'
 
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
 const directProxyID = '__direct__'
+const badgeColorPresets = ['#2563EB', '#7C3AED', '#DB2777', '#DC2626', '#EA580C', '#CA8A04', '#059669', '#0891B2']
 type ProxySourceMode = 'pool' | 'local'
 
 function normalizeLaunchArgs(args: string[]): string[] {
@@ -21,6 +23,14 @@ function normalizeLaunchArgs(args: string[]): string[] {
 function resolveDefaultLaunchArgs(args: string[]): string[] {
   const normalized = normalizeLaunchArgs(args)
   return normalized.length > 0 ? normalized : fallbackLowLaunchArgs
+}
+
+function fingerprintTargetPlatform(args: string[]): string {
+	for (let index = args.length - 1; index >= 0; index -= 1) {
+		const arg = args[index]?.trim() || ''
+		if (arg.startsWith('--fingerprint-platform=')) return arg.slice('--fingerprint-platform='.length).trim()
+	}
+	return ''
 }
 
 function resolvePoolProxySelection(
@@ -65,6 +75,8 @@ export function BrowserEditPage() {
     tags: [],
     keywords: [],
     groupId: '',
+    iconBadge: '',
+    iconBadgeColor: '#2563EB',
   })
   const [cores, setCores] = useState<BrowserCore[]>([])
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
@@ -79,6 +91,9 @@ export function BrowserEditPage() {
   const [saveError, setSaveError] = useState('')
   const [locationResolving, setLocationResolving] = useState(false)
   const [locationResult, setLocationResult] = useState<ProxyLocationResolveResult | null>(null)
+	const [fingerprintAdjustmentOpen, setFingerprintAdjustmentOpen] = useState(false)
+	const [fingerprintAdjustment, setFingerprintAdjustment] = useState<FingerprintArgResult | null>(null)
+	const [pendingSavePayload, setPendingSavePayload] = useState<BrowserProfileInput | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -122,6 +137,8 @@ export function BrowserEditPage() {
         tags: current.tags,
         keywords: current.keywords || [],
         groupId: current.groupId || '',
+        iconBadge: current.iconBadge || '',
+        iconBadgeColor: current.iconBadgeColor || '#2563EB',
       })
       setLaunchArgsText(currentLaunchArgs.join('\n'))
     }
@@ -136,6 +153,11 @@ export function BrowserEditPage() {
       }
       return { ...prev, [field]: value }
     })
+  }
+
+  const handleBadgeChange = (value: string) => {
+    const normalized = Array.from(value.trim().toUpperCase()).slice(0, 3).join('')
+    handleChange('iconBadge', normalized)
   }
 
   const handleProxyModeChange = (mode: ProxySourceMode) => {
@@ -154,6 +176,18 @@ export function BrowserEditPage() {
       })
     }
   }
+
+	const persistProfile = async (payload: BrowserProfileInput) => {
+		if (isCreate) {
+			await createBrowserProfile(payload)
+			toast.success('配置已创建')
+		} else if (id) {
+			await updateBrowserProfile(id, payload)
+			toast.success('配置已更新')
+		}
+		setIsDirty(false)
+		navigate('/browser/list')
+	}
 
   const handleSave = async () => {
     const resolvedProxyId = proxyMode === 'pool' ? (formData.proxyId || '').trim() : ''
@@ -181,15 +215,15 @@ export function BrowserEditPage() {
         setSaveError(validation.errorMsg || '代理配置无效')
         return
       }
-      if (isCreate) {
-        await createBrowserProfile(payload)
-        toast.success('配置已创建')
-      } else if (id) {
-        await updateBrowserProfile(id, payload)
-        toast.success('配置已更新')
-      }
-      setIsDirty(false)
-      navigate('/browser/list')
+		const normalized = await normalizeFingerprintArgs(payload.coreId, fingerprintTargetPlatform(payload.fingerprintArgs), payload.fingerprintArgs)
+		const normalizedPayload = { ...payload, fingerprintArgs: normalized.args }
+		if (normalized.adjusted.length > 0 || normalized.warnings.length > 0) {
+			setFingerprintAdjustment(normalized)
+			setPendingSavePayload(normalizedPayload)
+			setFingerprintAdjustmentOpen(true)
+			return
+		}
+		await persistProfile(normalizedPayload)
     } catch (error: any) {
       setSaveError(typeof error === 'string' ? error : error?.message || '保存失败')
     } finally {
@@ -321,6 +355,41 @@ export function BrowserEditPage() {
               className="w-full"
             />
           </FormItem>
+          <FormItem label="Dock / 任务栏角标" hint="留空自动编号，支持 1–3 个字母、数字或中文" className="md:col-span-2">
+            <div className="flex flex-col gap-4 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-secondary)]/45 p-4 sm:flex-row sm:items-center">
+              <ProfileIconBadge badge={formData.iconBadge} color={formData.iconBadgeColor} size="lg" />
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-[minmax(150px,220px)_1fr]">
+                <Input
+                  value={formData.iconBadge}
+                  onChange={event => handleBadgeChange(event.target.value)}
+                  placeholder={isCreate ? '自动编号（如 01）' : '输入角标'}
+                  aria-label="实例系统图标角标"
+                />
+                <div className="flex flex-wrap items-center gap-2" aria-label="角标颜色">
+                  {badgeColorPresets.map(color => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${formData.iconBadgeColor === color ? 'border-[var(--color-text-primary)]' : 'border-white/80'}`}
+                      style={{ backgroundColor: color }}
+                      title={color}
+                      aria-label={`使用颜色 ${color}`}
+                      aria-pressed={formData.iconBadgeColor === color}
+                      onClick={() => handleChange('iconBadgeColor', color)}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={formData.iconBadgeColor}
+                    onChange={event => handleChange('iconBadgeColor', event.target.value.toUpperCase())}
+                    className="h-8 w-10 cursor-pointer rounded border border-[var(--color-border-default)] bg-transparent p-0.5"
+                    title="自定义角标颜色"
+                    aria-label="自定义角标颜色"
+                  />
+                </div>
+              </div>
+            </div>
+          </FormItem>
         </div>
       </Card>
 
@@ -400,6 +469,7 @@ export function BrowserEditPage() {
         <FingerprintPanel
           value={formData.fingerprintArgs}
           onChange={args => handleChange('fingerprintArgs', args)}
+		  coreId={formData.coreId}
 			  chromiumMajor={cores.find(core => core.coreId === formData.coreId)?.chromiumMajor || 0}
         />
       </Card>
@@ -417,6 +487,35 @@ export function BrowserEditPage() {
           )}
         </div>
       </Card>
+
+	  <ConfirmModal
+		open={fingerprintAdjustmentOpen}
+		onClose={() => { setFingerprintAdjustmentOpen(false); setPendingSavePayload(null) }}
+		onConfirm={() => {
+			if (!pendingSavePayload) return
+			setSaving(true)
+			persistProfile(pendingSavePayload).catch((error: any) => {
+				setSaveError(typeof error === 'string' ? error : error?.message || '保存失败')
+			}).finally(() => setSaving(false))
+		}}
+		title="应用指纹兼容性调整"
+		content={(
+			<div className="space-y-3 text-sm">
+				{fingerprintAdjustment?.adjusted.map(item => <p key={item}>{item}</p>)}
+				{fingerprintAdjustment?.warnings.map(item => <p key={item} className="text-[var(--color-warning)]">{item}</p>)}
+				<div className="max-h-48 overflow-auto border-t border-[var(--color-border)] pt-2">
+					{fingerprintAdjustment?.entries.map(entry => (
+						<div key={entry.arg} className="mb-1 flex items-start justify-between gap-3 text-xs">
+							<code className="break-all">{entry.arg}</code>
+							<span className="shrink-0 text-[var(--color-text-muted)]">{entry.source === 'user' ? '用户配置' : entry.source === 'compatibility-migration' ? '兼容性迁移' : '内核能力调整'}</span>
+						</div>
+					))}
+				</div>
+			</div>
+		)}
+		confirmText="调整并保存"
+		cancelText="返回修改"
+	  />
 
       <ConfirmModal
         open={leaveConfirm}

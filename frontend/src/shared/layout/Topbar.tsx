@@ -1,5 +1,5 @@
 ﻿import { useState, useRef, useEffect } from 'react'
-import { Bell, User, Settings, Check, Trash2, Info, AlertCircle, CheckCircle } from 'lucide-react'
+import { Bell, Settings, Check, Trash2, Info, AlertCircle, CheckCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { useNotificationStore, type Notification } from '../../store/notificationStore'
@@ -139,18 +139,22 @@ export function Topbar() {
       <div className="flex-1" />
 
       {/* 右侧操作 */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
         {/* 通知按钮 */}
         <div className="relative" ref={dropdownRef}>
           <button
+            type="button"
             onClick={() => setShowNotifications(!showNotifications)}
             className={clsx(
-              'relative w-8 h-8 flex items-center justify-center rounded-md transition-colors duration-150',
+              'relative flex h-9 w-9 items-center justify-center rounded-md transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-surface)]',
               showNotifications
                 ? 'text-[var(--color-accent)] bg-[var(--color-accent-muted)]'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-accent-muted)]'
             )}
             title="通知"
+            aria-label="通知"
+            aria-haspopup="dialog"
+            aria-expanded={showNotifications}
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
@@ -175,22 +179,11 @@ export function Topbar() {
 
         <Link
           to="/settings"
-          className="w-8 h-8 flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-accent-muted)] rounded-md transition-colors duration-150"
+          className="flex h-9 w-9 items-center justify-center rounded-md text-[var(--color-text-muted)] transition-colors duration-150 hover:bg-[var(--color-accent-muted)] hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-surface)]"
           title="设置"
+          aria-label="设置"
         >
           <Settings className="w-4 h-4" />
-        </Link>
-
-        <div className="w-px h-5 bg-[var(--color-border-default)] mx-1.5" />
-
-        <Link
-          to="/profile"
-          className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-md hover:bg-[var(--color-accent-muted)] transition-colors duration-150"
-        >
-          <div className="w-7 h-7 bg-[var(--color-accent)] rounded-md flex items-center justify-center">
-            <User className="w-3.5 h-3.5 text-[var(--color-text-inverse)]" />
-          </div>
-          <span className="text-sm font-medium text-[var(--color-text-secondary)]">Admin</span>
         </Link>
       </div>
     </header>

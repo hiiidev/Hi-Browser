@@ -104,14 +104,20 @@ export function BrowserListHeader({
           </Button>
           <div className="flex items-center bg-[var(--color-bg-secondary)] rounded-md border border-[var(--color-border-default)] p-0.5 ml-2">
             <button
-              className={`p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors ${viewMode === 'card' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
+			  type="button"
+			  aria-label="卡片视图"
+			  aria-pressed={viewMode === 'card'}
+			  className={`min-h-8 min-w-8 rounded p-1.5 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${viewMode === 'card' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
               onClick={() => onViewModeChange('card')}
               title="卡片视图"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
-              className={`p-1.5 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors ${viewMode === 'table' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
+			  type="button"
+			  aria-label="表格视图"
+			  aria-pressed={viewMode === 'table'}
+			  className={`min-h-8 min-w-8 rounded p-1.5 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${viewMode === 'table' ? 'bg-[var(--color-bg-surface)] shadow-sm text-[var(--color-accent)]' : ''}`}
               onClick={() => onViewModeChange('table')}
               title="表格视图"
             >

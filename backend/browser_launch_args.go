@@ -18,6 +18,10 @@ var managedLaunchArgSpecs = []managedLaunchArgSpec{
 	{prefix: "--proxy-server", takesValue: true},
 	{prefix: "--load-extension", takesValue: true},
 	{prefix: "--disable-extensions-except", takesValue: true},
+	{prefix: "-AppleLanguages", takesValue: true},
+	{prefix: "-AppleLocale", takesValue: true},
+	{prefix: "--use-mock-keychain", takesValue: false},
+	{prefix: "--password-store", takesValue: true},
 }
 
 func sanitizeManagedLaunchArgs(args []string) ([]string, []string) {

@@ -290,6 +290,8 @@ func (a *App) importProfilePackageFromPath(zipPath string) (ProfilePackageImport
 		source.RuntimeWarning = ""
 		source.LastError = ""
 		source.LaunchCode = ""
+		source.IconBadge = ""
+		source.IconBadgeColor = ""
 		source.CreatedAt = now
 		source.UpdatedAt = now
 		source.DeletedAt = ""
@@ -327,18 +329,22 @@ func (a *App) importProfilePackageFromPath(zipPath string) (ProfilePackageImport
 		}
 		committedDirs = append(committedDirs, item.FinalDir)
 	}
-	a.browserMgr.Mutex.Lock()
+	profilesToAdd := make([]*browser.Profile, 0, len(prepared))
 	for i := range prepared {
 		profile := &prepared[i].Profile
-		a.browserMgr.Profiles[profile.ProfileId] = profile
-		committedProfiles = append(committedProfiles, profile.ProfileId)
 		if a.launchCodeSvc != nil {
 			if code, err := a.launchCodeSvc.EnsureCode(profile.ProfileId); err == nil {
 				profile.LaunchCode = code
 			}
 		}
+		profilesToAdd = append(profilesToAdd, profile)
 	}
-	a.browserMgr.Mutex.Unlock()
+	if err := a.browserMgr.AddImportedProfiles(profilesToAdd); err != nil {
+		return ProfilePackageImportResult{}, err
+	}
+	for _, profile := range profilesToAdd {
+		committedProfiles = append(committedProfiles, profile.ProfileId)
+	}
 	if err := a.browserMgr.SaveProfiles(); err != nil {
 		return ProfilePackageImportResult{}, err
 	}
@@ -498,7 +504,7 @@ func replaceProfileUserDataDir(stagingDir string, finalDir string) error {
 		if err := os.Rename(finalDir, backupDir); err != nil {
 			return fmt.Errorf("备份现有用户数据目录失败: %w", err)
 		}
-	} else if err != nil && !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("检查用户数据目录失败: %w", err)
 	}
 	if err := os.Rename(stagingDir, finalDir); err != nil {

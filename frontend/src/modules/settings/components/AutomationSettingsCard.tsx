@@ -71,6 +71,8 @@ function resolveAutomationStatus(state: AutomationState): {
   const systemNodePath = state.status.systemNodePath || state.settings.systemNodePath
   const systemNodeLabel = state.status.systemNodeDetected
     ? '已检测到'
+	: nodeSource === 'bundled' && state.settings.nodeSource !== 'system'
+		? '无需（当前使用内建 Node）'
     : systemNodePath
       ? '已配置，待验证'
       : '未检测到'
@@ -166,7 +168,7 @@ export function AutomationSettingsCard({
               options={AUTOMATION_NODE_SOURCE_OPTIONS}
             />
           </FormItem>
-          <FormItem label="系统 Node 路径" hint="留空则走 PATH">
+          <FormItem label="系统 Node 路径" hint="留空会检测 PATH、Homebrew、Volta、asdf、mise 与 fnm 等常见位置">
             <Input
               value={automationSystemNodePathDraft}
               onChange={event => onSystemNodePathDraftChange(event.target.value)}

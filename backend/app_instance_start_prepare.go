@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -37,6 +38,7 @@ type browserStartPlan struct {
 	startStableWindow    time.Duration
 	maxStartAttempts     int
 	totalReadyTimeout    time.Duration
+	compatibilityWarning string
 }
 
 var clearBrowserSessionRestoreData = browser.ClearSessionRestoreData
@@ -127,6 +129,25 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 	if err != nil {
 		return nil, err
 	}
+	capabilities := a.browserFingerprintCapabilities(profile.CoreId, fingerprintTargetPlatform(profile.FingerprintArgs))
+	normalizedFingerprint := browsercore.NormalizeFingerprintArgsForCapabilities(profile.FingerprintArgs, capabilities)
+	compatibilityWarning := ""
+	if !sameStringSlice(profile.FingerprintArgs, normalizedFingerprint.Args) {
+		profile.FingerprintArgs = append([]string{}, normalizedFingerprint.Args...)
+		if err := a.browserMgr.SaveProfiles(); err != nil {
+			return nil, fmt.Errorf("保存指纹兼容性迁移结果: %w", err)
+		}
+	}
+	if len(normalizedFingerprint.Adjusted) > 0 {
+		compatibilityWarning = "指纹参数已按当前内核能力调整：" + strings.Join(normalizedFingerprint.Adjusted, "；")
+	}
+	originalChromeBinaryPath := chromeBinaryPath
+	badgedChromeBinaryPath, iconWarning := a.prepareProfileBrowserIcon(profile, chromeBinaryPath)
+	chromeBinaryPath = badgedChromeBinaryPath
+	compatibilityWarning = combineRuntimeWarnings(compatibilityWarning, iconWarning)
+	if err := configurePlatformProfileLocale(profile, chromeBinaryPath != originalChromeBinaryPath); err != nil {
+		compatibilityWarning = combineRuntimeWarnings(compatibilityWarning, "实例语言偏好设置失败，浏览器可能跟随系统语言："+err.Error())
+	}
 
 	effectiveProxy, acquiredProxyBridge, releaseProxyBridge, err := a.resolveBrowserStartProxy(input, profile)
 	if err != nil {
@@ -164,7 +185,7 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 		chromeBinaryPath:     chromeBinaryPath,
 		userDataDir:          userDataDir,
 		extensionDirs:        extensionDirs,
-		args:                 buildBrowserLaunchArgs(profile, a.browserChromiumMajor(profile), userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
+		args:                 buildBrowserLaunchArgs(profile, capabilities, userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
 		deferredStartTargets: deferredStartTargets,
 		effectiveProxy:       effectiveProxy,
 		acquiredProxyBridge:  acquiredProxyBridge,
@@ -174,7 +195,20 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 		startStableWindow:    startStableWindow,
 		maxStartAttempts:     maxStartAttempts,
 		totalReadyTimeout:    totalReadyTimeout,
+		compatibilityWarning: compatibilityWarning,
 	}, nil
+}
+
+func sameStringSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *BrowserProfile, bookmarks []BrowserBookmark) ([]string, []string, string, string, error) {
@@ -273,7 +307,9 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 	return sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, chromeBinaryPath, userDataDir, nil
 }
 
-func buildBrowserLaunchArgs(profile *BrowserProfile, chromiumMajor int, userDataDir string, debugPort int, effectiveProxy string, extensionDirs []string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string) []string {
+func buildBrowserLaunchArgs(profile *BrowserProfile, capabilities browsercore.FingerprintCapabilities, userDataDir string, debugPort int, effectiveProxy string, extensionDirs []string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string) []string {
+	sanitizedProfileLaunchArgs, _ = sanitizeManagedLaunchArgs(sanitizedProfileLaunchArgs)
+	sanitizedExtraLaunchArgs, _ = sanitizeManagedLaunchArgs(sanitizedExtraLaunchArgs)
 	args := []string{
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 		fmt.Sprintf("--remote-debugging-port=%d", debugPort),
@@ -309,10 +345,14 @@ func buildBrowserLaunchArgs(profile *BrowserProfile, chromiumMajor int, userData
 		args = append(args, fmt.Sprintf("--load-extension=%s", extensionArg))
 	}
 
-	normalizedFingerprint := browsercore.NormalizeFingerprintArgs(profile.FingerprintArgs, chromiumMajor)
-	args = append(args, normalizedFingerprint.Args...)
+	normalizedFingerprint := browsercore.NormalizeFingerprintArgsForCapabilities(profile.FingerprintArgs, capabilities)
+	sanitizedFingerprintArgs, _ := sanitizeManagedLaunchArgs(normalizedFingerprint.Args)
+	args = append(args, sanitizedFingerprintArgs...)
 	args = append(args, sanitizedProfileLaunchArgs...)
 	args = append(args, sanitizedExtraLaunchArgs...)
+	if runtime.GOOS == "darwin" {
+		args = append(args, "--use-mock-keychain")
+	}
 	return browser.BuildLaunchArgs(args, launchTargets)
 }
 

@@ -38,10 +38,12 @@ func (a *App) BrowserProfileSetKeywords(profileId string, keywords []string) (*B
 }
 
 func (a *App) BrowserProfileCreate(input BrowserProfileInput) (*BrowserProfile, error) {
+	input, _ = a.normalizeBrowserProfileFingerprintInput(input)
 	return a.browserMgr.Create(input)
 }
 
 func (a *App) BrowserProfileUpdate(profileId string, input BrowserProfileInput) (*BrowserProfile, error) {
+	input, _ = a.normalizeBrowserProfileFingerprintInput(input)
 	return a.browserMgr.Update(profileId, input)
 }
 
@@ -140,6 +142,8 @@ func (a *App) migrateToSQLite() {
 					LaunchArgs:         pc.LaunchArgs,
 					Tags:               pc.Tags,
 					Keywords:           pc.Keywords,
+					IconBadge:          pc.IconBadge,
+					IconBadgeColor:     pc.IconBadgeColor,
 					CreatedAt:          pc.CreatedAt,
 					UpdatedAt:          pc.UpdatedAt,
 				}

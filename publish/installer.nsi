@@ -1,10 +1,10 @@
 ﻿; Hi Browser NSIS Installer Script
-; Usage: makensis /DVERSION=1.3.0 /DSTAGINGDIR=C:\path\to\staging installer.nsi
+; Usage: makensis /DVERSION=1.4.1 /DSTAGINGDIR=C:\path\to\staging installer.nsi
 
 Unicode True
 
 !ifndef VERSION
-  !define VERSION "1.3.0"
+  !define VERSION "1.4.1"
 !endif
 !ifndef STAGINGDIR
   !define STAGINGDIR "..\publish\staging"

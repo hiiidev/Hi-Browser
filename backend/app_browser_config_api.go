@@ -147,13 +147,7 @@ func (a *App) BrowserCoreImportLocal() (*BrowserCore, error) {
 		return nil, fmt.Errorf("browser manager is nil")
 	}
 
-	selectedPath, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
-		Title: "选择 Chrome 内核归档文件",
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "Chrome 内核归档 (" + browser.SupportedCoreArchiveDescription() + ")", Pattern: browser.SupportedCoreArchivePattern()},
-			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
-		},
-	})
+	selectedPath, err := wailsruntime.OpenFileDialog(a.ctx, browserCoreImportDialogOptions(gort.GOOS))
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +163,21 @@ func (a *App) BrowserCoreImportLocal() (*BrowserCore, error) {
 	return a.importLocalBrowserCoreArchive(absPath)
 }
 
+func browserCoreImportDialogOptions(goos string) wailsruntime.OpenDialogOptions {
+	options := wailsruntime.OpenDialogOptions{Title: "选择 Chrome 内核归档文件"}
+	// Wails 2.12 on macOS converts every pattern to UTType. The catch-all *.* pattern
+	// becomes an invalid type and may terminate the process inside NSOpenPanel.
+	// Leaving Filters empty makes NSOpenPanel accept files safely; archive validation
+	// still happens in importLocalBrowserCoreArchive after selection.
+	if !strings.EqualFold(strings.TrimSpace(goos), "darwin") {
+		options.Filters = []wailsruntime.FileFilter{
+			{DisplayName: "Chrome 内核归档 (" + browser.SupportedCoreArchiveDescription() + ")", Pattern: browser.SupportedCoreArchivePattern()},
+			{DisplayName: "所有文件 (*.*)", Pattern: "*.*"},
+		}
+	}
+	return options
+}
+
 func (a *App) importLocalBrowserCoreArchive(archivePath string) (*BrowserCore, error) {
 	archiveName := strings.TrimSpace(filepath.Base(archivePath))
 	coreName := strings.TrimSpace(coreNameFromArchiveName(archiveName))
@@ -180,7 +189,7 @@ func (a *App) importLocalBrowserCoreArchive(archivePath string) (*BrowserCore, e
 	targetDir := a.browserMgr.ResolveRelativePath(targetCorePath)
 	if _, err := os.Stat(targetDir); err == nil {
 		return nil, fmt.Errorf("同名内核目录已存在：%s", targetCorePath)
-	} else if err != nil && !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
 

@@ -140,7 +140,7 @@ echo Asset source: frontend\dist
 echo Auto reload: disabled
 echo.
 
-wails dev -m -nogorebuild -noreload -s -skipbindings -assetdir frontend/dist
+wails dev -m -nosyncgomod -nogorebuild -noreload -s -skipbindings -assetdir frontend/dist
 set "EXIT_CODE=%errorlevel%"
 
 if not "%EXIT_CODE%"=="0" (
@@ -235,7 +235,7 @@ echo Starting Wails dev...
 echo Frontend URL: http://127.0.0.1:%FRONTEND_PORT%
 echo.
 
-wails dev -m -s -skipbindings -frontenddevserverurl http://127.0.0.1:%FRONTEND_PORT% -viteservertimeout 60
+wails dev -m -nosyncgomod -s -skipbindings -frontenddevserverurl http://127.0.0.1:%FRONTEND_PORT% -viteservertimeout 60
 set "EXIT_CODE=%errorlevel%"
 
 if not "%EXIT_CODE%"=="0" (

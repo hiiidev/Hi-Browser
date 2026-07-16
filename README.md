@@ -1,233 +1,221 @@
-﻿# Hi Browser
+# Hi Browser
 
-> 面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具（Windows / Linux / macOS unsigned）。
+> 面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具，支持 Windows、Linux 与 macOS。
 
 [![Release](https://img.shields.io/github/v/release/hiiidev/Hi-Browser?sort=semver)](https://github.com/hiiidev/Hi-Browser/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)](https://github.com/hiiidev/Hi-Browser/releases)
 [![Issues](https://img.shields.io/github/issues/hiiidev/Hi-Browser)](https://github.com/hiiidev/Hi-Browser/issues)
 
-## 推荐内核项目
+> [!IMPORTANT]
+> 本项目在原项目基础上的新增功能与修复目前仅在 macOS arm64 环境完成实际运行测试。Windows 和 Linux 保留构建与适配代码，但相关新增能力尚未完成同等程度的实机验证，使用前请自行测试。
 
-Hi Browser 当前推荐配套使用的浏览器内核，来源于开源项目 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium)。
+## 项目介绍
 
-如果你正在寻找可直接下载和维护的指纹内核版本，建议先查看它的 Releases 页面：
+Hi Browser 用于在一台桌面设备上管理多个彼此隔离的浏览器实例。每个实例可以拥有独立的用户数据、指纹参数、代理出口、插件配置、标签和快捷启动码，适合多账号运营、跨境业务、本地测试与自动化场景。
 
-- <https://github.com/adryfish/fingerprint-chromium/releases>
+项目的核心目标是：
 
-这个项目为 Hi Browser 的内核准备提供了直接可用的基础来源，这里先对原项目做明确推荐与致谢。
+- 一账号一实例，避免 Cookie、LocalStorage、IndexedDB 等数据互相污染。
+- 一实例一代理，稳定维护账号与网络出口的对应关系。
+- 统一管理浏览器内核、代理节点、插件、自动化脚本与运行状态。
+- 配置和实例数据保存在本地，由使用者自行掌控和备份。
 
-### 自动安装浏览器内核
-
-内核管理页通过静态 `browser-core-manifest.json` 读取 `adryfish/fingerprint-chromium` 的稳定版本，并按当前操作系统与架构选择资产。客户端不调用 GitHub Releases API，也不抓取 Release HTML。全新安装没有可用内核时，应用会显示版本、平台、架构、大小与来源，只有用户确认后才开始下载；不会在后台静默下载数百 MB 文件。手动导入和旧的 URL 下载入口继续保留。
-
-静态 Manifest 查询使用 ETag 缓存，读取顺序为远程 Manifest、上次成功缓存、安装包内置 Manifest。远程地址暂时不可用时会显示缓存并标记数据可能过期，已经安装的内核仍可正常启动。
-
-`.github/workflows/update-browser-core-manifest.yml` 每 6 小时运行一次，通过 GitHub Actions 的临时 Token 查询上游并发布到 `browser-core-index` 分支。Token 只存在于 Action 运行环境，不进入客户端、数据库、Manifest 或日志。也可在 Actions 页面手动触发该工作流。
-
-仓库需要在 `Settings → Actions → General → Workflow permissions` 中启用 `Read and write permissions`。如果组织策略不允许修改该选项，可创建具有当前仓库 Contents 写权限的 fine-grained token，并保存为 Actions Secret `MANIFEST_PUSH_TOKEN`；工作流会优先使用该 Secret。
-
-### 下载校验与安装安全
-
-如果 Release 提供 SHA-256 或 checksums 文件，安装前会匹配当前资产并验证；校验不一致会立即停止。发布者未提供独立校验值时，应用仍计算并保存本地 SHA-256，但 UI 会明确标记这不能证明发布来源真实性。
-
-归档先下载到 `download-cache/browser-core/*.part`，再解压到 `chrome/.staging/<task-id>`。安装过程拒绝路径穿越、符号链接和硬链接，并限制文件数量与解压总尺寸；只有可执行文件和架构验证通过后才原子移动到正式目录并注册数据库。失败或取消不会注册残缺内核。
-
-下载弹窗支持系统代理、直连、当前应用代理栈节点和 `https://gh-proxy.com/` GitHub 加速。GitHub 加速属于第三方服务，仅临时重写 HTTPS GitHub 资产地址；下载后仍执行现有校验和 staging 安装流程。
-
-### macOS Gatekeeper
-
-Hi Browser 不会自动删除 `com.apple.quarantine`，也不会绕过 Gatekeeper。unsigned 内核或应用被拦截时，请先确认 Release 来源与 SHA-256，然后在 Finder 中右键选择“打开”，或前往“系统设置 → 隐私与安全性”查看系统提供的主动放行入口。只有在理解风险并确认文件来源后，才应由用户自行执行系统管理操作。
-
-### 更新、回滚与 Provider 扩展
-
-应用启动后延迟检查更新，每 24 小时最多一次。新版本采用并行目录安装，不覆盖正在使用的版本；安装成功后只影响之后启动的实例，用户可保留旧默认版本、切换默认版本或回滚。应用管理版本默认保留最近两个，手动导入版本不会被自动清理。
-
-Release 逻辑位于 `backend/internal/browsercore`，默认使用 `StaticManifestProvider`，并通过 `Provider` 接口隔离版本列表、兼容资产选择、下载元数据、版本解析和指纹能力。Manifest 生成脚本位于 `tools/browsercore/update_manifest.py`。新增其他内核仓库时应实现 Provider 或生成相同 schema 的静态 Manifest，不要把仓库特定逻辑写入前端。
-
-Hi Browser 的目标很明确：在一台桌面设备上，帮助用户稳定管理多个彼此隔离的浏览器实例，并配合代理池、浏览器内核和快捷启动能力完成日常运营或测试工作。
-
-## 目录
-
-- [项目简介](#项目简介)
-- [近期更新](#近期更新)
-- [更新日志](CHANGELOG.md)
-- [核心特性](#核心特性)
-- [界面预览](#界面预览)
-- [快速开始](#快速开始)
-- [常用操作](#常用操作)
-- [常见问题](#常见问题)
-- [Roadmap](#roadmap)
-- [贡献](#贡献)
-- [支持与反馈](#支持与反馈)
-- [License](#license)
-
-## 项目简介
-
-Hi Browser 适合以下场景：
+适用场景：
 
 - 多账号环境隔离
 - 跨境电商与社媒账号运营
-- 需要独立代理出口的本地测试
-- 需要统一管理浏览器内核和实例配置的团队
+- 独立代理出口测试
+- 浏览器自动化与外部系统集成
+- 团队统一维护内核和实例配置
 
-这个项目当前提供的核心价值是：
+## 原项目与本项目的关系
 
-- 给每个账号分配独立浏览器实例
-- 给每个实例绑定独立代理
-- 统一管理浏览器内核、标签、关键字和快捷打开码
-- 在本地保存配置和运行数据，便于自主控制
+Hi Browser 推荐使用开源项目 [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) 提供的浏览器内核：
 
-## 近期更新
+- 上游项目负责 Chromium 内核及指纹能力。
+- Hi Browser 不修改原始 Chromium 内核，而是在其基础上提供桌面管理、实例隔离、代理连接、参数适配、自动化和跨平台发布能力。
+- 内核版本与下载资产来自 [fingerprint-chromium Releases](https://github.com/adryfish/fingerprint-chromium/releases)。
 
-### 1.3.0 · 2026-06-23
+感谢 fingerprint-chromium 项目提供可维护的指纹浏览器内核基础。
 
-- 自动化增强：完善自动化脚本导入、运行、目标实例选择和执行记录管理，提升多实例自动化编排能力
-- 插件管理：新增插件包管理能力，支持插件安装、导入、启停、删除、实例限制和单实例插件配置
-- VPN 优化：优化代理/VPN 连接链路，完善 Xray、sing-box、Mihomo 等连接栈的启动、测速、检测和预热能力
-- 实例迁移：支持实例导入导出，可将实例配置和完整浏览器用户数据目录打包迁移到新环境
-- 代理适配：实例导入时按代理名称匹配本地同名代理，匹配不到或同名不唯一时自动清空代理
-- 界面优化：优化实例列表、关键字展示、操作菜单和导入导出入口，减少页面拥挤和无效信息
+## 在原项目基础上修复了什么
 
-### 1.2.0 · 2026-05-09
+### macOS 兼容性
 
-- 重点升级接口调用：Launch API 补齐实例增删改查、按 code / selector 启动、runtime session / status / stop 和统一 CDP 入口，方便外部系统直接调用浏览器能力
-- 完善自动化接口链路：脚本执行支持 selector / params 覆盖和 `timeoutMs` 超时控制，双实例 runtime 流程支持超时取消与错误返回
-- 增强代理池：新增链式代理导入、编辑和预览能力，支持 HTTP / SOCKS5 两层链路，并优化直连代理批量导入
-- 优化代理检测：新增测速目标、IP 健康检测目标和桥接启动超时配置，链式代理也可以参与测速与健康检测
-- 改进实例启动：代理异常时支持本次直连启动，不修改实例原有代理配置；默认代理池只保留直连节点
-- 升级书签能力：新增 IP 检测站点默认书签，支持设置启动时自动打开，并可同步到已有未运行实例
+- 修复 Chromium 148 的 `CFBundleIconName` 优先读取 `Assets.car`，导致实例 Dock 角标不生效的问题。
+- 为每个实例生成稳定 Bundle ID 和独立派生 App，Dock 可以显示不同的编号与颜色角标。
+- 使用版本化缓存、`plutil`、扩展属性清理和重新签名，原始 Chromium App 保持不变；派生失败时自动回退原内核并显示警告。
+- 修复 `-AppleLanguages`、`-AppleLocale` 被 Chromium 当作网址打开的问题。
+- 按实例 Bundle ID 写入独立语言偏好，使网页请求、`navigator.language`、Intl locale 与界面语言保持一致。
+- 所有 macOS 实例统一使用隔离免提示存储，避免访问系统密码存储时出现授权弹窗。
+- 修复 macOS 导入本地浏览器内核时的路径识别与崩溃问题。
+- 修复安装版把配置写入只读 `.app` 的问题，运行数据统一写入用户状态目录。
 
-### 1.1.0 · 2026-03-19
+### 指纹参数兼容性
 
-- 完善 Linux 支持：补齐 Linux 环境下的开发、打包、安装、启动与运行链路，并持续修复安装版启动与退出稳定性问题
-- 补齐 macOS unsigned 内测构建链路：支持在原生 macOS 主机上打包 `.app` / `.zip`，并将用户状态目录放到 `~/Library/Application Support/ant-browser`
-- 新增 SOCKS 代理测试支持：SOCKS 代理能力已进入测试阶段，后续会继续验证稳定性与兼容性
-- 实验性支持接口触发浏览器：支持通过接口启动浏览器实例，便于后续接入自动化流程
+- 适配 fingerprint-chromium 144+ 与 148 的参数变化，清理已经失效的旧 GPU/WebGL 参数。
+- GPU 指纹默认由 seed 驱动的真实参数集生成，也可以显式切换为真实 GPU。
+- 保存和启动前按当前内核能力规范化参数，并向用户展示兼容性调整结果。
+- 保留 `--lang`、`--accept-lang` 和 `--timezone`，不通过 JavaScript 注入伪造语言或时区。
+- 时区列表按当前日期计算 UTC 偏移，正确处理纽约、伦敦、悉尼等地区的夏令时。
 
-完整历史版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+### 启动与代理稳定性
 
-## 源码分支说明
+- 增强浏览器启动就绪检测、调试端口恢复、会话恢复和延迟打开启动页逻辑。
+- 修复代理连接栈自动混用导致的测速结果与实际启动链路不一致问题。
+- 实例启动、测速、真实连通性、IP 健康、预热和代理下载统一遵守当前连接栈。
+- 代理异常时支持仅本次直连启动，不修改实例原有代理配置。
+- 完善 Xray、sing-box、Mihomo 和自动化 Node 运行时的跨平台发现、校验与打包。
 
-- `master`：面向开发者的干净基线分支，不提交 `data/app.db`、实例目录或其他用户数据。首次启动时会自动初始化空数据库。
-- `user_data`：在 `master` 基础上额外提交一份 `data/app.db` 测试快照，便于演示、联调和复现问题。
-- 代理运行时 `bin/xray.exe`、`bin/sing-box.exe` 已随源码仓库提供；开发和发布打包不需要再单独下载这些运行时文件。
+### 内核安装安全
 
-## 核心特性
+- 内核下载不再依赖客户端直接抓取 GitHub Releases 页面，改用静态 Manifest、ETag 缓存和内置回退数据。
+- 下载先写入 `.part`，解压到 staging 目录，校验通过后再原子安装。
+- 解压过程拒绝路径穿越、符号链接和硬链接，并限制文件数量与总尺寸。
+- 支持 SHA-256 校验；上游未提供独立校验值时会明确标记为“仅本地完整性校验”。
+- 下载失败、取消或验证失败不会注册残缺内核。
 
-- 实例隔离管理：支持创建、编辑、启动、停止、重启、克隆和删除浏览器实例
-- 代理池配置：支持统一维护代理节点，并将代理分配到具体实例
-- 多协议支持：支持常见代理配置方式，并支持导入 Clash
-- 内核管理：支持维护多个 Chrome 内核版本，并设置默认内核
-- 快捷启动：支持通过实例 Code 和 `Ctrl + K` 快速打开目标实例
-- 标签与检索：支持按标签、关键字、状态、代理、内核、分组进行筛选
-- 自动化脚本：支持脚本导入、运行、目标实例选择、执行记录和外部接口调用
-- 插件管理：支持插件安装、导入、启停、删除、实例限制和单实例插件配置
-- 实例迁移：支持将实例配置和浏览器用户数据目录导出为 ZIP，并导入为新实例
-- VPN / 代理检测：支持连接栈预热、测速、IP 健康检测和代理异常处理
-- 本地化存储：配置和实例数据保存在本地，适合长期使用和备份
+## 在原项目基础上新增了什么
+
+以下新增能力当前只经过 macOS arm64 环境测试；Windows 和 Linux 的实际表现仍需进一步验证。
+
+| 模块 | 新增能力 |
+| --- | --- |
+| 实例管理 | 创建、编辑、启动、停止、重启、复制、回收站、批量操作和独立系统图标角标 |
+| 环境隔离 | 每实例独立用户数据、指纹参数、代理、插件、标签、关键字和分组 |
+| 代理池 | 节点导入、分组、绑定、预热、测速、真实连通性和 IP 健康检测 |
+| 多连接栈 | Xray + sing-box 组合栈，以及独立 Mihomo 栈 |
+| 内核管理 | 自动发现、下载、校验、安装、切换默认版本、保留旧版本和回滚 |
+| 指纹配置 | 跨平台预设、seed、语言、时区、屏幕、硬件、Canvas、Audio、字体和网络策略 |
+| 快捷启动 | 实例 Code、`Ctrl + K` 搜索以及外部 Launch API |
+| 自动化 | Playwright/CDP 脚本导入、脚本包、目标实例选择、运行记录和外部调用 |
+| 插件管理 | 插件安装、导入、启停、删除、实例限制和单实例配置 |
+| 实例迁移 | 配置与完整用户数据导出为 ZIP，并导入为新实例 |
+| 跨平台发布 | Windows 安装包/便携包、Linux deb/tar.gz、macOS unsigned app/zip |
 
 ## 界面预览
 
-### 1. 控制台
+### 控制台
 
-<img src="images/readme/001-首页.png" alt="控制台" width="100%" />
+<img src="images/readme/001-首页.png" alt="Hi Browser 控制台" width="100%" />
 
-对应功能点：
+### 实例列表
 
-- 查看实例总数、运行中实例、代理节点数量和内核版本
-- 从首页快速进入 `实例列表`、`代理池配置`、`内核管理`、`系统设置`
-- 查看客户端版本、运行环境、数据存储和当前实例运行状态
+<img src="images/readme/002-实例列表.png" alt="浏览器实例列表" width="100%" />
 
-### 2. 实例列表
-
-<img src="images/readme/002-实例列表.png" alt="实例列表" width="100%" />
-
-对应功能点：
-
-- 统一查看和管理所有浏览器实例
-- 按状态、代理、内核、分组、关键字筛选实例
-- 支持 `新建配置`、启动、停止、重启、配置、克隆、删除
-- 给实例分配快捷打开码，后续可以直接快速启动
-
-### 3. 代理池配置
+### 代理池配置
 
 <img src="images/readme/003-设置代理池.png" alt="代理池配置" width="100%" />
 
-对应功能点：
-
-- 统一管理代理节点
-- 支持按协议、分组筛选代理
-- 支持手动维护代理和导入 Clash
-- 支持查看延迟、IP 健康并挑选可用节点
-
-代理连接栈规则：
-
-- `default_connector_type` 只有两套连接栈：`xray` 和 `mihomo`。
-- `xray` 表示 Xray + sing-box 组合栈：Xray 负责 vmess/vless/trojan/shadowsocks/链式代理等，sing-box 负责 hysteria2/tuic/anytls 等协议。
-- `mihomo` 表示独立 Mihomo 栈：需要桥接的代理统一走 mihomo。
-- 实例启动、代理测速、真实连通性、IP 健康、预热和插件下载代理必须按当前连接栈执行；不得在 `xray` 组合栈和 `mihomo` 栈之间自动混用。
-- 详细约束见 `docs/proxy-connector-stacks.md`。
-
-### 4. 代理生效验证
+### 代理生效验证
 
 <img src="images/readme/004-自定义代理.png" alt="代理生效验证" width="100%" />
 
-对应功能点：
-
-- 启动实例后访问 IP 检测网站验证代理是否真正生效
-- 检查 IP 地区、ASN、运营商和风险值等信息
-- 用于确认当前实例是否已经走目标代理出口
-
 ## 快速开始
+
+### 支持平台
+
+- Windows 10 / 11，64 位
+- Linux amd64 / arm64
+- macOS amd64 / arm64，当前提供 unsigned 测试包
+
+建议至少准备 8 GB 内存和 2 GB 可用磁盘空间。
+
+### 下载运行
+
+1. 前往 [Releases](https://github.com/hiiidev/Hi-Browser/releases) 下载对应平台版本。
+2. Windows 可选择 NSIS 安装包或便携 ZIP。
+3. Linux 可安装 deb，或解压 tar.gz 后运行。
+4. macOS 解压后运行 `.app`；如果 Gatekeeper 拦截，请先核对来源，再通过 Finder 右键“打开”或“系统设置 → 隐私与安全性”主动放行。
+5. 首次进入“内核管理”，确认版本、平台、架构和下载来源后安装浏览器内核。
+6. 在“代理池配置”添加节点，再创建实例并绑定代理。
+
+Hi Browser 不会自动删除 `com.apple.quarantine`，也不会绕过 Gatekeeper。
+
+### 第一次使用建议
+
+1. 安装或导入 fingerprint-chromium 内核。
+2. 导入代理节点并完成测速与 IP 健康检查。
+3. 新建浏览器实例，设置指纹、代理、标签和启动参数。
+4. 启动实例并访问 IP 检测网站，确认实际出口。
+5. 后续使用固定实例与固定代理，避免账号环境频繁变化。
+
+## 代理连接栈
+
+`browser.default_connector_type` 只允许两种模式：
+
+- `xray`：Xray + sing-box 组合栈。Xray 负责 vmess、vless、trojan、shadowsocks 和链式代理；sing-box 负责 hysteria2、tuic、anytls 等协议。
+- `mihomo`：独立 Mihomo 栈，需要桥接的代理统一由 Mihomo 处理。
+
+两套连接栈不能自动混用。实例启动、测速、真实连通性、IP 健康、预热和代理下载必须使用当前选择的连接栈。
+
+## 数据目录
+
+macOS 安装版的运行数据位于：
+
+```text
+~/Library/Application Support/ant-browser/
+├── config.yaml
+├── chrome/              # 已安装浏览器内核
+├── download-cache/
+└── data/
+    ├── app.db           # 实例、代理、内核等配置
+    ├── automation/
+    ├── cache/
+    └── <profile-id>/    # 每实例浏览器用户数据
+```
+
+Linux 安装版默认使用 `$XDG_DATA_HOME/ant-browser`；未设置 `XDG_DATA_HOME` 时使用 `~/.local/share/ant-browser`。
+
+源码开发模式的相对配置默认位于仓库目录。不要提交 `data/app.db`、实例目录或其他真实用户数据。
+
+## 从源码运行
 
 ### 环境要求
 
-- 操作系统：
-  - Windows 10 / 11（64 位）
-  - Linux（amd64 / arm64）
-  - macOS（amd64 / arm64，当前为 unsigned 内测包）
-- 建议内存：8 GB 及以上
-- 建议磁盘空间：2 GB 以上
+- Go
+- Node.js 与 npm
+- Wails CLI 2.13+
+- 对应平台的原生构建工具
 
-### 下载与运行
+### macOS / Linux
 
-1. 前往 Releases 页面下载最新版本：<https://github.com/hiiidev/Hi-Browser/releases>
-2. 安装版直接运行 `HiBrowser-Setup-*.exe`
-3. 便携版解压后运行 `ant-chrome.exe`
-4. Linux 包下载后可直接安装 `ant-browser_<version>_<arch>.deb`，或解压 `tar.gz` 后运行 `ant-chrome`
-5. macOS unsigned 包解压后运行 `HiBrowser-<version>-macos-<arch>.app`；如被 Gatekeeper 拦截，请先在 Finder 中右键选择“打开”，或前往“系统设置 → 隐私与安全性”手动确认
+```bash
+make deps
+make dev          # Wails + Vite 热更新
+make dev-stable   # 使用已构建的前端资源
+make test
+make check
+make build
+```
 
-### 从源码运行
+### Windows
 
-1. 开发默认使用 `master` 分支；该分支不带测试用户数据，适合作为日常开发基线。
-2. 如需带测试库的演示环境，请切换到 `user_data` 分支。
-3. Windows 统一执行 `bat\dev.bat`；默认是 `live` 热更新模式，如需静态资源排查使用 `bat\dev.bat stable`，如需受限内存复现使用 `bat\dev.bat limited`。
-4. Windows 运行时使用 `bin/xray.exe`、`bin/sing-box.exe`；Linux 运行时使用 `bin/linux-<arch>/xray`、`bin/linux-<arch>/sing-box`；macOS 运行时使用 `bin/darwin-<arch>/xray`、`bin/darwin-<arch>/sing-box`。
-5. 运行时文件采用“仓库固定 + 哈希校验”，校验清单在 `publish/runtime-manifest.json`，固定来源清单在 `publish/runtime-sources.json`。
-6. 如需刷新 Linux / macOS 运行时，执行 `python3 tools/runtime/sync-runtime.py --target <target>`（会按固定来源下载、校验归档并更新 manifest）。
+```powershell
+bat\dev.bat
+bat\dev.bat stable
+bat\publish.bat -Target WINDOWS -WindowsFormat INSTALLER
+bat\publish.bat -Target WINDOWS -WindowsFormat PORTABLE
+bat\publish.bat -Target WINDOWS -WindowsFormat BOTH
+```
 
-开发模式说明：
+代理运行时按平台放在 `bin/<os>-<arch>/`。固定来源记录在 `publish/runtime-sources.json`，哈希清单记录在 `publish/runtime-manifest.json`。
 
-- `bat\dev.bat`：默认 `live` 模式，启动 Vite watcher，并通过 `-frontenddevserverurl` 接入桌面壳
-- `bat\dev.bat stable`：先构建 `frontend/dist`，再以静态资源模式启动 Wails，不依赖外部 Vite dev server
-- `bat\dev.bat live`：显式指定 `live` 模式，效果与默认一致
-- `bat\dev.bat limited`：在 `live` 基础上为 watcher 与其子进程附加 Windows Job Object 内存限制
-- 如需为依赖下载配置代理，可在启动前设置 `DEV_PROXY_URL`、`DEV_NO_PROXY`、`DEV_GOPROXY`
+## 自动化脚本包
 
-### 自动化脚本包
+可提交的示例脚本位于：
 
-自动化脚本现在分成两层：
+```text
+backend/internal/automation/demo-library/
+```
 
-- 仓库里的可提交 demo 脚本库：`backend/internal/automation/demo-library/`
-- 本地运行时 / 用户自定义脚本：`data/automation/scripts/`
+用户脚本运行数据位于：
 
-规则是：
+```text
+data/automation/scripts/<script-id>/
+```
 
-- 只有 demo 脚本库里的脚本会提交到 git
-- `data/automation/scripts/` 下的运行时脚本统一忽略，不提交 git
-- 默认只同步三个 demo：`dual-instance-runtime-switch`、`news-query-txt`、`web-image-generate-download`
-
-脚本包采用“一脚本一目录”的可搬运结构：
+对外脚本包采用以下结构：
 
 ```text
 <script-id>/
@@ -236,138 +224,47 @@ Hi Browser 适合以下场景：
 └── 其他辅助文件
 ```
 
-其中：
-
-- `automation.script.json`：脚本元数据和默认参数
-- `index.cjs`：入口脚本，`entryFile` 也可以改成相对路径，例如 `scripts/index.cjs`
-- 其他辅助文件：脚本依赖的本地模块、模板、静态资源
-
-运行时落盘结构和分发结构不同。应用内部会把脚本写到：
-
-```text
-data/automation/scripts/<script-id>/
-├── config
-├── index.cjs
-└── 其他辅助文件
-```
-
-这里的 `config` 是应用内部持久化格式；对外复制、导入、脚本库管理一律使用 `automation.script.json` 包结构。
-
-### Windows 发布打包（源码）
-
-Windows 发布脚本默认保持原有 NSIS 安装包行为，也可以生成便携 ZIP，或一次生成两种产物：
-
-```powershell
-bat\publish.bat zip
-bat\publish.bat both
-bat\publish.bat -Target WINDOWS -WindowsFormat INSTALLER
-bat\publish.bat -Target WINDOWS -WindowsFormat PORTABLE
-bat\publish.bat -Target WINDOWS -WindowsFormat BOTH
-```
-
-省略 `-WindowsFormat` 时等同于 `INSTALLER`。`zip` 快捷命令只生成便携 ZIP，`both` 快捷命令同时生成安装包和便携 ZIP。安装包和便携 ZIP 输出到 `publish\output\`。
-
-### Linux 发布打包（源码）
-
-Linux 发布脚本位于 `publish/linux/`。
-
-```bash
-bash publish/linux/publish-linux.sh --arch amd64
-bash publish/linux/publish-linux.sh --arch arm64
-```
-
-详细说明见 [publish/linux/README.md](publish/linux/README.md)。
-
-### macOS unsigned 发布打包（源码）
-
-macOS 发布脚本位于 `publish/mac/`，必须在原生 macOS 主机上执行，且目标架构需与主机架构一致。
-
-```bash
-bash publish/mac/publish-mac.sh --arch amd64
-bash publish/mac/publish-mac.sh --arch arm64
-```
-
-脚本会生成 unsigned `.app` 和 `.zip`，适合 PR 验证与内部测试。详细说明见 [publish/mac/README.md](publish/mac/README.md)。
-
-### 准备浏览器内核
-
-代理运行时已经随仓库提供，你只需要准备浏览器内核。
-
-1. 打开应用，进入 `指纹浏览器 > 内核管理`
-2. 优先使用应用内下载功能准备内核
-3. 如果手动准备内核，请确保目录下存在 `chrome.exe`
-
-建议目录结构：
-
-```text
-chrome/
-  chrom-142/
-    chrome.exe
-    ...
-```
-
-### 第一次使用建议流程
-
-1. 在 `代理池配置` 中先导入或新增可用代理节点
-2. 在 `实例列表` 中点击 `新建配置`
-3. 选择实例名称、内核、代理、标签和需要的启动参数
-4. 返回实例列表，点击启动按钮运行实例
-5. 打开 IP 检测网站，确认代理结果是否符合预期
-
-## 常用操作
-
-| 目标 | 入口 | 说明 |
-| --- | --- | --- |
-| 新建浏览器实例 | `实例列表 > 新建配置` | 创建一个新的独立浏览器环境 |
-| 配置代理池 | `代理池配置` | 维护代理节点并检查延迟、健康状态 |
-| 绑定实例代理 | `实例编辑页` | 给指定实例分配目标代理节点 |
-| 启动实例 | `实例列表` | 单击启动按钮即可运行目标实例 |
-| 快速打开实例 | `Ctrl + K` | 可按 Code、实例名、标签、关键字快速检索 |
-| 管理浏览器内核 | `内核管理` | 新增、编辑、删除和设置默认内核 |
-| 验证代理结果 | 启动实例后访问 IP 检测网站 | 核对 IP、地区、ASN、风险值 |
+`automation.script.json` 保存元数据和默认参数，`entryFile` 可以指向目录内的其他相对路径。
 
 ## 常见问题
 
-### 1. 应用无法启动怎么办？
+### 应用启动后没有浏览器窗口
 
-先检查浏览器内核路径是否有效，并确认目标目录下存在 `chrome.exe`。
+先确认已经安装可用于当前平台和架构的浏览器内核，再检查实例运行警告、调试端口和用户数据目录权限。
 
-### 2. 实例启动了但代理没有生效怎么办？
+### 代理测速成功，但实例出口不一致
 
-先检查代理节点本身是否可用，再确认该实例已经正确绑定代理。建议启动后访问 IP 检测网站复核当前出口。
+检查 `default_connector_type`。Hi Browser 不会在 `xray` 组合栈和 `mihomo` 栈之间自动混用；切换连接栈后需要重新测速。
 
-如果代理池里本地客户端可用节点很多，但 Hi Browser 中“只展示可用”数量明显偏少，先确认当前 `default_connector_type` 是否与本地客户端一致。Hi Browser 不会在 `xray` 组合栈和 `mihomo` 栈之间自动混用；切换连接栈后需要重新测速。
+### 多个账号如何避免串号
 
-### 3. 实例太多，怎么快速找到目标实例？
+建议一账号一实例、一实例一稳定代理，不要复用用户数据目录，也不要频繁修改同一实例的出口地区、语言和时区。
 
-可以在 `实例列表` 中按状态、代理、内核、分组、关键字筛选，也可以通过 `Ctrl + K` 使用实例 Code 或名称快速启动。
+### macOS 为什么显示 unsigned 或被 Gatekeeper 拦截
 
-### 4. 多个账号怎么避免串号？
+当前 macOS 包用于内部测试，没有 Apple Developer ID 公证。请先核对 Release 来源和 SHA-256，再通过系统提供的主动放行入口打开。
 
-建议采用一账号一实例、一实例一稳定代理的方式，不要混用浏览器环境，也不要频繁切换同一实例的出口 IP。
+## 文档
 
-## Roadmap
+- [完整更新日志](CHANGELOG.md)
+- [macOS 发布说明](publish/mac/README.md)
+- [Linux 发布说明](publish/linux/README.md)
+- [浏览器内核 Manifest](browser-core-manifest.json)
 
-- 完善自动化模块能力
-- 持续补充使用文档和接口说明
-- 增强实例模板、批量管理和检索体验
+## 贡献与反馈
 
-## 贡献
+欢迎通过 Issue 和 Pull Request 参与改进：
 
-欢迎通过 Issue 和 Pull Request 参与改进。
+- Bug 反馈请附带应用版本、操作系统、复现步骤和必要日志。
+- 功能建议请说明业务场景、预期行为和当前限制。
+- 较大改动建议先创建 Issue 对齐需求。
 
-- Bug 反馈：请附带版本号、系统版本、复现步骤和截图
-- 功能建议：请说明业务场景、预期行为和现有问题
-- 文档优化：欢迎直接提交 README、教程和截图说明相关改进
+相关入口：
 
-如果是较大改动，建议先开 Issue 对齐需求再提交 PR。
-
-## 支持与反馈
-
-- Releases：<https://github.com/hiiidev/Hi-Browser/releases>
-- Issues：<https://github.com/hiiidev/Hi-Browser/issues>
-- 感谢以下社区的支持：<https://linux.do/>
+- [Releases](https://github.com/hiiidev/Hi-Browser/releases)
+- [Issues](https://github.com/hiiidev/Hi-Browser/issues)
+- 社区支持：<https://linux.do/>
 
 ## License
 
-当前仓库暂未附带独立的 `LICENSE` 文件，后续会补充。
+当前仓库暂未附带独立 `LICENSE` 文件。使用上游 fingerprint-chromium 内核时，请同时遵守其项目许可证和 Chromium 相关许可证。

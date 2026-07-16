@@ -39,6 +39,13 @@ func (m *Manager) loadProfiles() {
 				p.CoreId = normalizeProfileCoreID(p.CoreId)
 				m.Profiles[p.ProfileId] = p
 			}
+			if m.ensureLoadedProfileIconBadgesLocked(profiles) {
+				for _, profile := range profiles {
+					if err := m.ProfileDAO.Upsert(profile); err != nil {
+						log.Error("补齐实例系统图标角标失败", logger.F("profile_id", profile.ProfileId), logger.F("error", err))
+					}
+				}
+			}
 			if len(profiles) > 0 {
 				log.Info("实例配置从数据库加载完成", logger.F("count", len(profiles)))
 			} else {
@@ -53,6 +60,7 @@ func (m *Manager) loadProfiles() {
 		return
 	}
 	now := time.Now().Format(time.RFC3339)
+	loadedProfiles := make([]*Profile, 0, len(m.Config.Browser.Profiles))
 	for _, item := range m.Config.Browser.Profiles {
 		profileId := strings.TrimSpace(item.ProfileId)
 		if profileId == "" {
@@ -66,7 +74,7 @@ func (m *Manager) loadProfiles() {
 		if updatedAt == "" {
 			updatedAt = createdAt
 		}
-		m.Profiles[profileId] = &Profile{
+		profile := &Profile{
 			ProfileId:          profileId,
 			ProfileName:        item.ProfileName,
 			UserDataDir:        item.UserDataDir,
@@ -81,6 +89,8 @@ func (m *Manager) loadProfiles() {
 			LaunchArgs:         append([]string{}, item.LaunchArgs...),
 			Tags:               append([]string{}, item.Tags...),
 			Keywords:           append([]string{}, item.Keywords...),
+			IconBadge:          item.IconBadge,
+			IconBadgeColor:     item.IconBadgeColor,
 			Running:            false,
 			DebugPort:          0,
 			Pid:                0,
@@ -88,6 +98,11 @@ func (m *Manager) loadProfiles() {
 			CreatedAt:          createdAt,
 			UpdatedAt:          updatedAt,
 		}
+		m.Profiles[profileId] = profile
+		loadedProfiles = append(loadedProfiles, profile)
+	}
+	if m.ensureLoadedProfileIconBadgesLocked(loadedProfiles) {
+		_ = m.SaveProfiles()
 	}
 	log.Info("浏览器配置从文件加载完成", logger.F("count", len(m.Profiles)))
 }
@@ -124,6 +139,8 @@ func (m *Manager) SaveProfiles() error {
 			LaunchArgs:         append([]string{}, profile.LaunchArgs...),
 			Tags:               append([]string{}, profile.Tags...),
 			Keywords:           append([]string{}, profile.Keywords...),
+			IconBadge:          profile.IconBadge,
+			IconBadgeColor:     profile.IconBadgeColor,
 			CreatedAt:          profile.CreatedAt,
 			UpdatedAt:          profile.UpdatedAt,
 		})

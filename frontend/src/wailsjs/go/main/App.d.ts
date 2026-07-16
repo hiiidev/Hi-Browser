@@ -5,6 +5,7 @@ import {backend} from '../models';
 import {backup} from '../models';
 import {config} from '../models';
 import {browser} from '../models';
+import {browsercore} from '../models';
 import {proxy} from '../models';
 import {logger} from '../models';
 import {launchcode} from '../models';
@@ -94,6 +95,8 @@ export function BrowserCoreDownloadTask(arg1:string):Promise<browser.DownloadTas
 
 export function BrowserCoreExtendedInfo():Promise<Array<browser.CoreExtendedInfo>>;
 
+export function BrowserCoreFingerprintCapabilities(arg1:string,arg2:string):Promise<browsercore.FingerprintCapabilities>;
+
 export function BrowserCoreImportLocal():Promise<config.BrowserCore>;
 
 export function BrowserCoreImportLocalDirectory():Promise<config.BrowserCore>;
@@ -101,6 +104,8 @@ export function BrowserCoreImportLocalDirectory():Promise<config.BrowserCore>;
 export function BrowserCoreInstallRelease(arg1:string,arg2:string):Promise<string>;
 
 export function BrowserCoreList():Promise<Array<config.BrowserCore>>;
+
+export function BrowserCoreNormalizeFingerprintArgs(arg1:string,arg2:string,arg3:Array<string>):Promise<browsercore.FingerprintArgResult>;
 
 export function BrowserCorePreparation():Promise<backend.BrowserCorePreparationStatus>;
 

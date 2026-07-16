@@ -26,6 +26,8 @@ type Profile struct {
 	Tags               []string `json:"tags"`
 	Keywords           []string `json:"keywords"`
 	GroupId            string   `json:"groupId"` // 所属分组ID
+	IconBadge          string   `json:"iconBadge"`
+	IconBadgeColor     string   `json:"iconBadgeColor"`
 	LaunchCode         string   `json:"launchCode"`
 	Running            bool     `json:"running"`
 	DebugPort          int      `json:"debugPort"`
@@ -52,6 +54,8 @@ type ProfileInput struct {
 	Tags            []string `json:"tags"`
 	Keywords        []string `json:"keywords"`
 	GroupId         string   `json:"groupId"` // 所属分组ID
+	IconBadge       string   `json:"iconBadge"`
+	IconBadgeColor  string   `json:"iconBadgeColor"`
 }
 
 // ProfileCopyOptions 复制实例时的附加选项。

@@ -430,7 +430,7 @@ func stripSingleExtractedRoot(dest string, topLevels map[string]struct{}) error 
 		target := filepath.Join(dest, entry.Name())
 		if _, err := os.Stat(target); err == nil {
 			return fmt.Errorf("剥离顶层目录失败，目标已存在: %s", target)
-		} else if err != nil && !os.IsNotExist(err) {
+		} else if !os.IsNotExist(err) {
 			return err
 		}
 		if err := os.Rename(source, target); err != nil {

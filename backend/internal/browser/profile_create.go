@@ -32,6 +32,10 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 			coreId = defaultCore.CoreId
 		}
 	}
+	iconBadge, iconBadgeColor, err := m.normalizeProfileIconBadgeInputLocked(input.IconBadge, input.IconBadgeColor, profileId)
+	if err != nil {
+		return nil, err
+	}
 	profile := &Profile{
 		ProfileId:       profileId,
 		ProfileName:     input.ProfileName,
@@ -44,6 +48,8 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		Tags:            input.Tags,
 		Keywords:        append([]string{}, input.Keywords...),
 		GroupId:         strings.TrimSpace(input.GroupId),
+		IconBadge:       iconBadge,
+		IconBadgeColor:  iconBadgeColor,
 		Running:         false,
 		DebugPort:       0,
 		Pid:             0,

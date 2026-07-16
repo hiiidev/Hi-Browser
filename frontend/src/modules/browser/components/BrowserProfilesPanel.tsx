@@ -10,6 +10,7 @@ import type { BrowserCore, BrowserProfile, BrowserProxy, ProxySpeedTestResult } 
 import { browserProxyTestSpeed, testProxyConnectivity } from '../api'
 import type { BrowserViewMode } from './BrowserListLayout'
 import { KeywordInlineRow, LaunchCodeCell } from './BrowserListWidgets'
+import { ProfileIconBadge } from './ProfileIconBadge'
 
 type ProfileStatusVariant = 'default' | 'success' | 'error' | 'warning' | 'info'
 
@@ -305,20 +306,21 @@ function BrowserProfileCard({
 }) {
   return (
     <div
-      className={`flex flex-col border rounded-xl bg-[var(--color-bg-surface)] p-3 shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-all duration-200 h-[320px] overflow-hidden
+      className={`flex min-h-[286px] flex-col overflow-hidden rounded-2xl border bg-[var(--color-bg-surface)] p-4 shadow-[0_4px_16px_rgba(15,23,42,0.06)] transition-all duration-200
         ${isSelected ? 'border-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20' : 'border-[var(--color-border-default)] hover:border-[var(--color-accent)]'}
       `}
     >
-      <div className="flex flex-col gap-3 pb-3 border-b border-[var(--color-border-muted)]/50 shrink-0">
+	  <div className="flex flex-col gap-3 border-b border-[var(--color-border-muted)]/60 pb-3 shrink-0">
         <div className="flex justify-between items-start gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
+		  <div className="flex min-w-0 items-center gap-2">
             <input
               type="checkbox"
               className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)] mt-0.5 shrink-0"
               checked={isSelected}
               onChange={() => onToggleSelect(profile.profileId)}
             />
-            <Link className="text-[var(--color-accent)] font-medium text-sm hover:text-[var(--color-accent)] transition-colors truncate max-w-[200px]" to={`/browser/detail/${profile.profileId}`}>
+			<ProfileIconBadge badge={profile.iconBadge} color={profile.iconBadgeColor} size="sm" />
+			<Link className="min-w-0 truncate text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:text-[var(--color-accent)]" to={`/browser/detail/${profile.profileId}`} title={profile.profileName}>
               {profile.profileName}
             </Link>
             {profile.tags && profile.tags.length > 0 && (
@@ -333,7 +335,7 @@ function BrowserProfileCard({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-1 flex-wrap">
+		<div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           {profile.running ? (
             <Button size="sm" variant="secondary" onClick={() => onStop(profile.profileId)} title={isStopping ? '停止中' : '停止'} loading={isStopping}>
               {!isStopping && <Square className="w-4 h-4 mr-1.5" />}
@@ -345,38 +347,38 @@ function BrowserProfileCard({
               {isStarting ? '启动中' : '启动'}
             </Button>
           )}
-          <span className="w-px h-4 bg-[var(--color-border-muted)] mx-1"></span>
-          <Button size="sm" variant="ghost" onClick={() => onRestart(profile.profileId)} title="重启" className="px-3" disabled={isBusy}><RotateCcw className="w-4 h-4 mr-1.5" />重启</Button>
-          <Button size="sm" variant="ghost" onClick={() => onOpenKeywords(profile)} title="关键字管理" className="px-3" disabled={isBusy}><Key className="w-4 h-4 mr-1.5" />关键字</Button>
-          <Button size="sm" variant="ghost" onClick={() => onOpenExtensions(profile)} title="插件配置" className="px-3" disabled={isBusy}><Puzzle className="w-4 h-4 mr-1.5" />插件</Button>
-          <Link to={`/browser/edit/${profile.profileId}`}><Button size="sm" variant="ghost" title="配置" className="px-3" disabled={isBusy}><Settings className="w-4 h-4 mr-1.5" />配置</Button></Link>
-          <Button size="sm" variant="ghost" onClick={() => onOpenCopy(profile)} title="克隆" className="px-3" disabled={isBusy}><Copy className="w-4 h-4 mr-1.5" />克隆</Button>
-          <Button size="sm" variant="ghost" onClick={() => onDelete(profile.profileId)} title="删除" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-50" disabled={isBusy}><Trash2 className="w-4 h-4 mr-1.5" />删除</Button>
+		  <span className="mx-1 h-4 w-px shrink-0 bg-[var(--color-border-muted)]"></span>
+		  <Button size="sm" variant="ghost" onClick={() => onRestart(profile.profileId)} title="重启" aria-label="重启" className="px-2.5" disabled={isBusy}><RotateCcw className="w-4 h-4" /></Button>
+		  <Button size="sm" variant="ghost" onClick={() => onOpenKeywords(profile)} title="关键字管理" aria-label="关键字管理" className="px-2.5" disabled={isBusy}><Key className="w-4 h-4" /></Button>
+		  <Button size="sm" variant="ghost" onClick={() => onOpenExtensions(profile)} title="插件配置" aria-label="插件配置" className="px-2.5" disabled={isBusy}><Puzzle className="w-4 h-4" /></Button>
+		  <Link to={`/browser/edit/${profile.profileId}`}><Button size="sm" variant="ghost" title="配置" aria-label="配置" className="px-2.5" disabled={isBusy}><Settings className="w-4 h-4" /></Button></Link>
+		  <Button size="sm" variant="ghost" onClick={() => onOpenCopy(profile)} title="克隆" aria-label="克隆" className="px-2.5" disabled={isBusy}><Copy className="w-4 h-4" /></Button>
+		  <Button size="sm" variant="ghost" onClick={() => onDelete(profile.profileId)} title="删除" aria-label="删除" className="ml-auto px-2.5 text-red-500 hover:bg-red-50 hover:text-red-600" disabled={isBusy}><Trash2 className="w-4 h-4" /></Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-2 shrink-0">
-        <div className="flex flex-col gap-0.5">
+	  <div className="grid grid-cols-2 gap-x-5 gap-y-3 py-3 shrink-0">
+		<div className="min-w-0 rounded-lg bg-[var(--color-bg-secondary)] px-3 py-2">
           <span className="text-xs text-[var(--color-text-muted)] font-medium">内核版本</span>
-          <span className="text-xs text-[var(--color-text-primary)]">{coreLabel}</span>
+		  <span className="mt-1 block line-clamp-2 break-words text-xs leading-5 text-[var(--color-text-primary)]" title={coreLabel}>{coreLabel}</span>
         </div>
-        <div className="flex flex-col gap-0.5">
+		<div className="min-w-0 rounded-lg bg-[var(--color-bg-secondary)] px-3 py-2">
           <span className="text-xs text-[var(--color-text-muted)] font-medium">代理配置</span>
-          <ProxyInlineActions
+		  <div className="mt-1"><ProxyInlineActions
             profile={profile}
             proxy={proxy}
             isBusy={isBusy}
             onOpenProxyPicker={onOpenProxyPicker}
             maxWidthClass="max-w-full"
-          />
+          /></div>
         </div>
-        <div className="flex flex-col gap-0.5">
+		<div className="min-w-0 px-1">
           <span className="text-xs text-[var(--color-text-muted)] font-medium">快捷配置码</span>
           <div className="mt-0.5"><LaunchCodeCell profileId={profile.profileId} code={profile.launchCode || ''} onRefresh={onRefreshProfiles} /></div>
         </div>
-        <div className="flex flex-col gap-0.5">
+		<div className="min-w-0 px-1">
           <span className="text-xs text-[var(--color-text-muted)] font-medium">上次更新时间</span>
-          <span className="text-xs text-[var(--color-text-primary)]">{formatTime(profile.updatedAt)}</span>
+		  <span className="mt-0.5 block whitespace-nowrap text-xs text-[var(--color-text-primary)]">{formatTime(profile.updatedAt)}</span>
         </div>
       </div>
 
@@ -455,63 +457,73 @@ export function BrowserProfilesPanel({
     {
       key: 'profileName',
       title: '实例名称',
-      width: 320,
+		  width: 240,
       render: (value, record) => (
-        <div className="flex min-w-[260px] flex-col gap-1">
-          <Link className="block truncate whitespace-nowrap text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`} title={String(value || '')}>
-            {value}
-          </Link>
-          {record.tags && record.tags.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              {record.tags.map(tag => <Badge variant="default" key={tag}>{tag}</Badge>)}
-            </div>
-          )}
+        <div className="flex min-w-[260px] items-center gap-3">
+          <ProfileIconBadge badge={record.iconBadge} color={record.iconBadgeColor} size="sm" />
+          <div className="min-w-0 flex-1">
+            <Link className="block truncate whitespace-nowrap text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`} title={String(value || '')}>
+              {value}
+            </Link>
+            {record.tags && record.tags.length > 0 && (
+              <div className="mt-1 flex gap-1 flex-wrap">
+                {record.tags.map(tag => <Badge variant="default" key={tag}>{tag}</Badge>)}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
     {
       key: 'running',
       title: '状态',
-      width: 100,
+		  width: 96,
       render: (_, record) => {
         const status = getProfileStatus(record)
-        return <Badge variant={status.variant} dot>{status.label}</Badge>
+		return <Badge variant={status.variant} dot className="whitespace-nowrap">{status.label}</Badge>
       },
     },
+	  {
+		key: 'coreId',
+		title: '核心',
+		width: 230,
+		render: (_, record) => {
+		  const label = getProfileCoreLabel(record)
+		  return <span className="line-clamp-2 break-words text-xs leading-5" title={label}>{label}</span>
+		},
+	  },
     {
-      key: 'coreId',
-      title: '核心',
-      render: (_, record) => <span className="text-xs">{getProfileCoreLabel(record)}</span>,
-    },
-    {
-      key: 'proxyId',
-      title: '代理',
+		key: 'proxyId',
+		title: '代理',
+		width: 250,
       render: (value, record) => {
         const proxy = proxies.find(item => item.proxyId === value)
         const isBusy = isProfileBusy(record.profileId)
-        return <ProxyInlineActions profile={record} proxy={proxy} isBusy={isBusy} onOpenProxyPicker={onOpenProxyPicker} />
+		return <ProxyInlineActions profile={record} proxy={proxy} isBusy={isBusy} onOpenProxyPicker={onOpenProxyPicker} maxWidthClass="max-w-[230px]" />
       },
     },
     {
-      key: 'launchCode',
-      title: '快捷打开码',
+		key: 'launchCode',
+		title: '快捷打开码',
+		width: 180,
       render: (value, record) => <LaunchCodeCell profileId={record.profileId} code={value || ''} onRefresh={onRefreshProfiles} />,
     },
     {
       key: 'keywords',
       title: '关键字',
-      width: 200,
+		width: 180,
       render: (value) => <KeywordInlineRow keywords={value || []} />,
     },
     {
-      key: 'updatedAt',
-      title: '上次更新',
-      render: formatTime,
+		key: 'updatedAt',
+		title: '上次更新',
+		width: 160,
+		render: (value) => <span className="whitespace-nowrap text-xs">{formatTime(value)}</span>,
     },
     {
       key: 'actions',
       title: '操作',
-      width: 248,
+		width: 260,
       align: 'right',
       render: (_, record) => {
         const isStarting = isProfileStarting(record.profileId)
@@ -551,21 +563,22 @@ export function BrowserProfilesPanel({
 
   return (
     <Card padding="none">
-      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+	  <div className={viewMode === 'card' ? 'overflow-auto' : undefined} style={viewMode === 'card' ? { maxHeight: 'calc(100vh - 320px)' } : undefined}>
         {loading ? (
           <div className="py-16 flex items-center justify-center text-sm text-[var(--color-text-muted)]">加载中...</div>
         ) : profiles.length === 0 ? (
           <div className="py-16 flex items-center justify-center text-sm text-[var(--color-text-muted)]">暂无数据</div>
         ) : viewMode === 'table' ? (
-          <Table
-            columns={columns}
-            data={profiles}
-            rowKey="profileId"
-          />
+			  <Table
+                columns={columns}
+                data={profiles}
+                rowKey="profileId"
+				tableClassName="min-w-[1640px] table-fixed"
+              />
         ) : (
-          <div className="flex flex-wrap gap-4 min-h-[500px] p-4 items-start content-start">
+		  <div className="grid min-h-[420px] grid-cols-[repeat(auto-fill,minmax(min(100%,520px),1fr))] items-start gap-4 p-4">
             {profiles.map((profile) => (
-              <div key={profile.profileId} className="min-w-[360px] max-w-[560px] flex-[1_1_440px]">
+			  <div key={profile.profileId} className="min-w-0">
                 <BrowserProfileCard
                   profile={profile}
                   proxy={proxies.find(item => item.proxyId === profile.proxyId)}

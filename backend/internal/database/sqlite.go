@@ -230,6 +230,14 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_browser_cores_provider_release ON browser_cores(provider, release_tag)`,
 		},
 	},
+	{
+		version: 14,
+		desc:    "实例表添加系统图标角标字段",
+		stmts: []string{
+			`ALTER TABLE browser_profiles ADD COLUMN icon_badge TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE browser_profiles ADD COLUMN icon_badge_color TEXT NOT NULL DEFAULT '#2563EB'`,
+		},
+	},
 	// ── 新版本在此追加，格式：
 	// {
 	//     version: 4,

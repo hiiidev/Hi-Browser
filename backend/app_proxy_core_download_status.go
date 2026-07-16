@@ -30,6 +30,16 @@ func (a *App) proxyCoreStatus(spec proxyCoreSpec, target proxyCoreTarget) ProxyC
 			return result
 		}
 	}
+	if target.GOOS == goruntime.GOOS && target.GOARCH == goruntime.GOARCH {
+		if path, ok := existingProxyCoreFile(proxyCoreEnvironmentPath(spec), a.appRoot); ok {
+			result.Installed = true
+			result.Configured = true
+			result.BinaryPath = path
+			result.Source = "environment"
+			result.Message = proxyCoreInstalledMessage(result.Active, true)
+			return result
+		}
+	}
 	if path, source, ok := findInstalledProxyCoreBinary(a.appRoot, spec, target); ok {
 		result.Installed = true
 		result.BinaryPath = path
@@ -122,6 +132,17 @@ func findInstalledProxyCoreBinary(appRoot string, spec proxyCoreSpec, target pro
 		}
 	}
 	return "", "", false
+}
+
+func proxyCoreEnvironmentPath(spec proxyCoreSpec) string {
+	switch spec.ConfigKey {
+	case "xray":
+		return strings.TrimSpace(os.Getenv("XRAY_BINARY_PATH"))
+	case "sing-box":
+		return strings.TrimSpace(os.Getenv("SINGBOX_BINARY_PATH"))
+	default:
+		return ""
+	}
 }
 
 func proxyCoreConfiguredPath(a *App, spec proxyCoreSpec) string {

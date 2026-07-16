@@ -247,6 +247,12 @@ if [[ -f "$CHROME_README_SRC" ]]; then
   cp "$CHROME_README_SRC" "$APP_MACOS_DIR/chrome/README.md"
 fi
 
+if command -v codesign >/dev/null 2>&1; then
+  echo "  Re-signing assembled app bundle..."
+  codesign --force --deep --sign - "$APP_STAGE"
+  codesign --verify --deep --strict "$APP_STAGE"
+fi
+
 ditto "$APP_STAGE" "$APP_EXPORT"
 rm -f "$OUTPUT_DIR/$ZIP_NAME"
 ditto -c -k --sequesterRsrc --keepParent "$APP_EXPORT" "$OUTPUT_DIR/$ZIP_NAME"

@@ -170,6 +170,10 @@ export function BrowserCoreExtendedInfo() {
   return window['go']['main']['App']['BrowserCoreExtendedInfo']();
 }
 
+export function BrowserCoreFingerprintCapabilities(arg1, arg2) {
+  return window['go']['main']['App']['BrowserCoreFingerprintCapabilities'](arg1, arg2);
+}
+
 export function BrowserCoreImportLocal() {
   return window['go']['main']['App']['BrowserCoreImportLocal']();
 }
@@ -184,6 +188,10 @@ export function BrowserCoreInstallRelease(arg1, arg2) {
 
 export function BrowserCoreList() {
   return window['go']['main']['App']['BrowserCoreList']();
+}
+
+export function BrowserCoreNormalizeFingerprintArgs(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowserCoreNormalizeFingerprintArgs'](arg1, arg2, arg3);
 }
 
 export function BrowserCorePreparation() {

@@ -69,7 +69,10 @@ func acquireSingleInstance(appRoot string) (*singleInstanceGuard, bool, error) {
 		if signalExistingSingleInstance(lockPath) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("单实例锁被占用且无法唤醒已有应用")
+		if attempt < 2 {
+			time.Sleep(120 * time.Millisecond)
+			continue
+		}
 	}
 
 	return nil, false, fmt.Errorf("单实例锁被占用且无法唤醒已有应用")
