@@ -60,6 +60,53 @@ func TestDownloadRangeFallback(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestDownloadFallsBackToGitHubProxy(t *testing.T) {
+	payload := []byte("downloaded through GitHub acceleration")
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "GitHub unavailable", http.StatusBadGateway)
+	}))
+	defer primary.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer fallback.Close()
+
+	path := filepath.Join(t.TempDir(), "core.part")
+	if err := os.WriteFile(path, []byte("partial primary response"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.OpenFile(path, os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	var messages []string
+	err = doConcurrentDownloadWithFallback(
+		context.Background(),
+		primary.Client(),
+		primary.URL,
+		fallback.Client(),
+		fallback.URL,
+		file,
+		func(_ string, _ int, message string) { messages = append(messages, message) },
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("fallback download = %q", got)
+	}
+	if !strings.Contains(strings.Join(messages, "\n"), "GitHub 直连失败，正在切换 GitHub 加速重试...") {
+		t.Fatalf("fallback message missing: %v", messages)
+	}
+}
 func TestDownloadCancel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for i := 0; i < 100; i++ {

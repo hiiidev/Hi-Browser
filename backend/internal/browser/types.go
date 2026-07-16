@@ -172,6 +172,8 @@ type downloadTask struct {
 	CoreInput       CoreInput
 	ReplaceExisting bool
 	Client          *http.Client
+	FallbackURL     string
+	FallbackClient  *http.Client
 }
 
 // XrayBridge Xray 桥接进程

@@ -32,24 +32,33 @@ func (m *Manager) DownloadAndExtractCore(ctx context.Context, coreName string, t
 				CoreName:  core.CoreName,
 				CorePath:  core.CorePath,
 				IsDefault: core.IsDefault,
-			}, targetUrl, proxyConfig, false, "", nil)
+			}, targetUrl, proxyConfig, false, "", nil, "", nil)
 			return
 		}
 	}
-	m.startDownloadTask(ctx, CoreInput{CoreName: coreName}, targetUrl, proxyConfig, false, "", nil)
+	m.startDownloadTask(ctx, CoreInput{CoreName: coreName}, targetUrl, proxyConfig, false, "", nil, "", nil)
 }
 
 func (m *Manager) StartDownloadTask(ctx context.Context, coreInput CoreInput, targetURL, proxyConfig string, replaceExisting bool) (string, error) {
-	return m.startDownloadTask(ctx, coreInput, targetURL, proxyConfig, replaceExisting, "", nil)
+	return m.startDownloadTask(ctx, coreInput, targetURL, proxyConfig, replaceExisting, "", nil, "", nil)
 }
 
 func (m *Manager) StartDownloadTaskWithHTTPClient(ctx context.Context, coreInput CoreInput, targetURL, proxyConfig string, replaceExisting bool, client *http.Client) (string, error) {
-	return m.startDownloadTask(ctx, coreInput, targetURL, proxyConfig, replaceExisting, "", client)
+	return m.startDownloadTask(ctx, coreInput, targetURL, proxyConfig, replaceExisting, "", client, "", nil)
 }
 
-func (m *Manager) startDownloadTask(parent context.Context, coreInput CoreInput, targetURL, proxyConfig string, replaceExisting bool, reuseTaskID string, client *http.Client) (string, error) {
+func (m *Manager) StartDownloadTaskWithHTTPFallback(ctx context.Context, coreInput CoreInput, targetURL, proxyConfig string, replaceExisting bool, client *http.Client, fallbackURL string, fallbackClient *http.Client) (string, error) {
+	return m.startDownloadTask(ctx, coreInput, targetURL, proxyConfig, replaceExisting, "", client, fallbackURL, fallbackClient)
+}
+
+func (m *Manager) startDownloadTask(parent context.Context, coreInput CoreInput, targetURL, proxyConfig string, replaceExisting bool, reuseTaskID string, client *http.Client, fallbackURL string, fallbackClient *http.Client) (string, error) {
 	if err := validateCoreDownloadURL(targetURL); err != nil {
 		return "", err
+	}
+	if strings.TrimSpace(fallbackURL) != "" {
+		if err := validateCoreDownloadURL(fallbackURL); err != nil {
+			return "", fmt.Errorf("备用下载地址无效: %w", err)
+		}
 	}
 	assetKey := strings.TrimSpace(targetURL)
 	m.DownloadMutex.Lock()
@@ -65,11 +74,11 @@ func (m *Manager) startDownloadTask(parent context.Context, coreInput CoreInput,
 	}
 	ctx, cancel := context.WithCancel(parent)
 	now := time.Now().Format(time.RFC3339)
-	task := &downloadTask{State: DownloadTaskState{TaskID: taskID, Phase: "queued", Progress: 0, Message: "等待下载", CanRetry: false, CreatedAt: now, UpdatedAt: now, AssetName: filepath.Base(strings.SplitN(targetURL, "?", 2)[0])}, Cancel: cancel, URL: targetURL, ProxyConfig: proxyConfig, CoreInput: coreInput, ReplaceExisting: replaceExisting, Client: client}
+	task := &downloadTask{State: DownloadTaskState{TaskID: taskID, Phase: "queued", Progress: 0, Message: "等待下载", CanRetry: false, CreatedAt: now, UpdatedAt: now, AssetName: filepath.Base(strings.SplitN(targetURL, "?", 2)[0])}, Cancel: cancel, URL: targetURL, ProxyConfig: proxyConfig, CoreInput: coreInput, ReplaceExisting: replaceExisting, Client: client, FallbackURL: fallbackURL, FallbackClient: fallbackClient}
 	m.DownloadTasks[taskID] = task
 	m.DownloadAssets[assetKey] = taskID
 	m.DownloadMutex.Unlock()
-	go m.downloadAndExtractCore(ctx, taskID, coreInput, targetURL, proxyConfig, replaceExisting, client)
+	go m.downloadAndExtractCore(ctx, taskID, coreInput, targetURL, proxyConfig, replaceExisting, client, fallbackURL, fallbackClient)
 	return taskID, nil
 }
 
@@ -99,10 +108,10 @@ func (m *Manager) RetryDownloadTask(ctx context.Context, taskID string) (string,
 		m.DownloadMutex.Unlock()
 		return "", fmt.Errorf("下载任务不存在")
 	}
-	input, urlValue, proxyValue, replace, client := t.CoreInput, t.URL, t.ProxyConfig, t.ReplaceExisting, t.Client
+	input, urlValue, proxyValue, replace, client, fallbackURL, fallbackClient := t.CoreInput, t.URL, t.ProxyConfig, t.ReplaceExisting, t.Client, t.FallbackURL, t.FallbackClient
 	delete(m.DownloadAssets, urlValue)
 	m.DownloadMutex.Unlock()
-	return m.startDownloadTask(ctx, input, urlValue, proxyValue, replace, taskID, client)
+	return m.startDownloadTask(ctx, input, urlValue, proxyValue, replace, taskID, client, fallbackURL, fallbackClient)
 }
 
 // RedownloadCore 重新下载指定内核，验证成功后替换原目录并保留原配置。
@@ -117,10 +126,10 @@ func (m *Manager) RedownloadCore(ctx context.Context, coreId string, targetUrl s
 		CoreName:  core.CoreName,
 		CorePath:  core.CorePath,
 		IsDefault: core.IsDefault,
-	}, targetUrl, proxyConfig, true, "", nil)
+	}, targetUrl, proxyConfig, true, "", nil, "", nil)
 }
 
-func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, coreInput CoreInput, targetUrl string, proxyConfig string, replaceExisting bool, clientOverride *http.Client) {
+func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, coreInput CoreInput, targetUrl string, proxyConfig string, replaceExisting bool, clientOverride *http.Client, fallbackURL string, fallbackClient *http.Client) {
 	log := logger.New("Browser")
 	t := time.Now()
 
@@ -138,6 +147,10 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, cor
 			task.State.Progress = float64(progress)
 			task.State.Message = msg
 			task.State.UpdatedAt = time.Now().Format(time.RFC3339)
+			if eventPhase != "downloading" {
+				task.State.SpeedBytesPerSecond = 0
+				task.State.EstimatedSeconds = 0
+			}
 			if eventPhase == "failed" {
 				task.State.CanRetry = true
 				task.State.ErrorCode = "install_failed"
@@ -261,7 +274,7 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, cor
 
 	sendEvent("downloading", 0, "开始分析下载链接(检测多线程支持)...")
 
-	err = doConcurrentDownload(ctx, client, targetUrl, tempFile, sendEvent, func(downloaded, total, speed int64) {
+	updateStats := func(downloaded, total, speed int64) {
 		m.DownloadMutex.Lock()
 		defer m.DownloadMutex.Unlock()
 		if task := m.DownloadTasks[taskID]; task != nil {
@@ -272,7 +285,8 @@ func (m *Manager) downloadAndExtractCore(ctx context.Context, taskID string, cor
 				task.State.EstimatedSeconds = (total - downloaded) / speed
 			}
 		}
-	})
+	}
+	err = doConcurrentDownloadWithFallback(ctx, client, targetUrl, fallbackClient, fallbackURL, tempFile, sendEvent, updateStats)
 	if err != nil {
 		if ctx.Err() != nil {
 			sendEvent("error", 0, "下载已取消")

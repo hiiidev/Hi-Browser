@@ -50,6 +50,7 @@ export function CoreDownloadModal({
   const downloading = progress !== null && !terminal
   const isRedownload = form.mode === 'redownload'
   const managedRelease = Boolean(form.releaseTag)
+  const showDownloadSpeed = progress?.phase === 'downloading' && Number(progress.speedBytesPerSecond || 0) > 0
 
   const handleClose = () => {
     if (progress && !terminal) {
@@ -205,7 +206,9 @@ export function CoreDownloadModal({
             {Boolean(progress.totalBytes) && (
               <div className="mt-2 text-xs tabular-nums text-[var(--color-text-muted)]">
                 {(Number(progress.downloadedBytes || 0) / 1048576).toFixed(1)} / {(Number(progress.totalBytes || 0) / 1048576).toFixed(1)} MB
-                {' · '}{(Number(progress.speedBytesPerSecond || 0) / 1048576).toFixed(1)} MB/s
+                {showDownloadSpeed && (
+                  <>{' · '}{(Number(progress.speedBytesPerSecond || 0) / 1048576).toFixed(1)} MB/s</>
+                )}
               </div>
             )}
             {progress.errorDetail && <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap text-xs text-[var(--color-danger)]">{progress.errorDetail}</pre>}

@@ -2,14 +2,55 @@ package browser
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
+
+func doConcurrentDownloadWithFallback(
+	ctx context.Context,
+	client *http.Client,
+	targetURL string,
+	fallbackClient *http.Client,
+	fallbackURL string,
+	tempFile *os.File,
+	sendEvent func(string, int, string),
+	statsCallback func(int64, int64, int64),
+) error {
+	err := doConcurrentDownload(ctx, client, targetURL, tempFile, sendEvent, statsCallback)
+	if err == nil || ctx.Err() != nil || errors.Is(err, syscall.ENOSPC) || strings.TrimSpace(fallbackURL) == "" {
+		return err
+	}
+
+	primaryErr := err
+	sendEvent("downloading", 0, "GitHub 直连失败，正在切换 GitHub 加速重试...")
+	if err := tempFile.Truncate(0); err != nil {
+		return fmt.Errorf("GitHub 直连失败（%v），重置临时文件失败: %w", primaryErr, err)
+	}
+	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("GitHub 直连失败（%v），重置下载位置失败: %w", primaryErr, err)
+	}
+
+	retryClient := fallbackClient
+	if retryClient == nil {
+		retryClient = &http.Client{Transport: &http.Transport{}, CheckRedirect: secureCoreDownloadRedirect}
+	} else {
+		custom := *retryClient
+		custom.CheckRedirect = secureCoreDownloadRedirect
+		custom.Timeout = 0
+		retryClient = &custom
+	}
+	if err := doConcurrentDownload(ctx, retryClient, fallbackURL, tempFile, sendEvent, statsCallback); err != nil {
+		return fmt.Errorf("GitHub 直连失败（%v），加速重试也失败: %w", primaryErr, err)
+	}
+	return nil
+}
 
 func doConcurrentDownload(ctx context.Context, client *http.Client, targetUrl string, tempFile *os.File, sendEvent func(string, int, string), statsCallbacks ...func(int64, int64, int64)) error {
 	info, err := tempFile.Stat()

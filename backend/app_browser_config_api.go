@@ -353,7 +353,11 @@ func (a *App) BrowserCoreDownload(coreName, url, proxyConfig string) error {
 	if err != nil {
 		return err
 	}
-	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreName: coreName}, targetURL, proxyConfig, false, client)
+	fallbackURL, fallbackClient, err := a.prepareBrowserCoreDownloadFallback(url, proxyConfig)
+	if err != nil {
+		return err
+	}
+	_, err = a.browserMgr.StartDownloadTaskWithHTTPFallback(a.ctx, browser.CoreInput{CoreName: coreName}, targetURL, proxyConfig, false, client, fallbackURL, fallbackClient)
 	return err
 }
 
@@ -404,7 +408,11 @@ func (a *App) BrowserCoreInstallRelease(releaseTag, proxyConfig string) (string,
 	if clientErr != nil {
 		return "", clientErr
 	}
-	return a.browserMgr.StartDownloadTaskWithHTTPClient(a.coreAPIContext(), browser.CoreInput{CoreName: coreName, CorePath: filepath.ToSlash(filepath.Join("chrome", coreName)), IsDefault: len(a.browserMgr.ListCores()) == 0, Metadata: &metadata}, targetURL, proxyConfig, false, client)
+	fallbackURL, fallbackClient, fallbackErr := a.prepareBrowserCoreDownloadFallback(asset.DownloadURL, proxyConfig)
+	if fallbackErr != nil {
+		return "", fallbackErr
+	}
+	return a.browserMgr.StartDownloadTaskWithHTTPFallback(a.coreAPIContext(), browser.CoreInput{CoreName: coreName, CorePath: filepath.ToSlash(filepath.Join("chrome", coreName)), IsDefault: len(a.browserMgr.ListCores()) == 0, Metadata: &metadata}, targetURL, proxyConfig, false, client, fallbackURL, fallbackClient)
 }
 
 func (a *App) BrowserCoreDownloadTask(taskID string) (browser.DownloadTaskState, error) {
@@ -472,7 +480,11 @@ func (a *App) BrowserCoreRedownload(coreId, url, proxyConfig string) error {
 	if err != nil {
 		return err
 	}
-	_, err = a.browserMgr.StartDownloadTaskWithHTTPClient(a.ctx, browser.CoreInput{CoreId: core.CoreId, CoreName: core.CoreName, CorePath: core.CorePath, IsDefault: core.IsDefault}, targetURL, proxyConfig, true, client)
+	fallbackURL, fallbackClient, err := a.prepareBrowserCoreDownloadFallback(url, proxyConfig)
+	if err != nil {
+		return err
+	}
+	_, err = a.browserMgr.StartDownloadTaskWithHTTPFallback(a.ctx, browser.CoreInput{CoreId: core.CoreId, CoreName: core.CoreName, CorePath: core.CorePath, IsDefault: core.IsDefault}, targetURL, proxyConfig, true, client, fallbackURL, fallbackClient)
 	return err
 }
 
@@ -508,9 +520,30 @@ func browserCoreGitHubProxyURL(rawURL string) (string, error) {
 	return browserCoreGitHubProxyPrefix + value, nil
 }
 
+func (a *App) prepareBrowserCoreDownloadFallback(rawURL, proxyConfig string) (string, *http.Client, error) {
+	switch strings.TrimSpace(proxyConfig) {
+	case "", "__system__", "__direct__", "direct://":
+	default:
+		return "", nil, nil
+	}
+	proxiedURL, err := browserCoreGitHubProxyURL(rawURL)
+	if err != nil {
+		// Automatic fallback only applies to GitHub Release download URLs.
+		return "", nil, nil
+	}
+	directClient, err := a.browserCoreDownloadClient("__direct__")
+	if err != nil {
+		return "", nil, err
+	}
+	return proxiedURL, directClient, nil
+}
+
 func (a *App) browserCoreDownloadClient(proxyConfig string) (*http.Client, error) {
 	value := strings.TrimSpace(proxyConfig)
-	if value == "" || value == "__system__" || value == "__direct__" || value == "direct://" {
+	if value == "__direct__" || value == "direct://" {
+		return &http.Client{Transport: &http.Transport{}}, nil
+	}
+	if value == "" || value == "__system__" {
 		return nil, nil
 	}
 	connector := config.NormalizeBrowserConnectorType(a.config.Browser.DefaultConnectorType)
