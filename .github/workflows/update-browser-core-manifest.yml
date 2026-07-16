@@ -63,6 +63,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Generate manifest updates the checked-out master worktree. The file
+          # is already preserved in RUNNER_TEMP, so restore it before switching.
+          git restore --source=HEAD --staged --worktree -- browser-core-manifest.json
           if git ls-remote --exit-code origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
             git fetch --depth=1 origin \
               "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
