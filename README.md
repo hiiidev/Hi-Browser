@@ -208,7 +208,7 @@ bat\publish.bat -Target WINDOWS -WindowsFormat BOTH
 | --- | --- |
 | macOS | `HiBrowser-arm64.dmg`、`HiBrowser-amd64.dmg` |
 | Windows | NSIS 安装包、amd64 便携 ZIP |
-| Linux | amd64/arm64 deb 与 tar.gz |
+| Linux | `hi-browser_<version>_amd64.deb`、`hi-browser_<version>_arm64.deb` 与对应 tar.gz |
 
 发布前先将 `wails.json` 中的 `info.productVersion` 更新为目标版本并提交，然后推送对应标签：
 

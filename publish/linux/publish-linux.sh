@@ -133,11 +133,11 @@ APP_ICON_SRC="$ROOT_DIR/build/appicon.png"
 APP_BIN="$ROOT_DIR/build/bin/ant-chrome"
 WAILS_CONFIG="$ROOT_DIR/wails.json"
 CHROME_README_SRC="$ROOT_DIR/chrome/README.md"
-APP_PACKAGE_NAME="ant-browser"
+APP_PACKAGE_NAME="hi-browser"
 APP_BINARY_NAME="ant-chrome"
-APP_ICON_NAME="ant-browser"
-APP_DESKTOP_ID="ant-browser.desktop"
-APPSTREAM_ID="ant-browser"
+APP_ICON_NAME="hi-browser"
+APP_DESKTOP_ID="hi-browser.desktop"
+APPSTREAM_ID="hi-browser"
 APP_NAME="Hi Browser"
 APP_SUMMARY="Multi-profile browser launcher with proxy-pool management"
 APP_MAINTAINER="Hi Browser Team"
@@ -232,7 +232,7 @@ TAR_NAME="HiBrowser-${VERSION}-linux-${ARCH}.tar.gz"
 tar -C "$APP_STAGE" -czf "$OUTPUT_DIR/$TAR_NAME" .
 
 PKG_ROOT="$DEB_STAGE/${APP_PACKAGE_NAME}_${VERSION}_${ARCH}"
-INSTALL_ROOT="$PKG_ROOT/opt/ant-browser"
+INSTALL_ROOT="$PKG_ROOT/opt/hi-browser"
 DESKTOP_ROOT="$PKG_ROOT/usr/share/applications"
 ICON_THEME_ROOT="$PKG_ROOT/usr/share/icons/hicolor"
 PIXMAPS_ROOT="$PKG_ROOT/usr/share/pixmaps"
@@ -267,8 +267,8 @@ cat > "$DESKTOP_ROOT/$APP_DESKTOP_ID" <<EOF
 Version=1.0
 Name=${APP_NAME}
 Comment=${APP_SUMMARY}
-Exec=/opt/ant-browser/${APP_BINARY_NAME}
-TryExec=/opt/ant-browser/${APP_BINARY_NAME}
+Exec=/opt/hi-browser/${APP_BINARY_NAME}
+TryExec=/opt/hi-browser/${APP_BINARY_NAME}
 Icon=${APP_ICON_NAME}
 StartupWMClass=Ant-chrome
 Terminal=false
@@ -328,6 +328,9 @@ Priority: optional
 Architecture: ${ARCH}
 Maintainer: ${APP_MAINTAINER} <${APP_MAINTAINER_EMAIL}>
 Homepage: ${APP_HOMEPAGE}
+Provides: ant-browser
+Conflicts: ant-browser
+Replaces: ant-browser
 Installed-Size: ${INSTALLED_SIZE_KB}
 Depends: libc6 (>= 2.31), libgtk-3-0, libglib2.0-0, libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37
 Description: ${APP_NAME} desktop app
@@ -339,8 +342,8 @@ EOF
 cat > "$PKG_ROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
-ln -sf /opt/ant-browser/ant-chrome /usr/bin/ant-chrome
-chmod +x /opt/ant-browser/ant-chrome /opt/ant-browser/bin/xray /opt/ant-browser/bin/sing-box || true
+ln -sf /opt/hi-browser/ant-chrome /usr/bin/ant-chrome
+chmod +x /opt/hi-browser/ant-chrome /opt/hi-browser/bin/xray /opt/hi-browser/bin/sing-box || true
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 fi
@@ -380,6 +383,7 @@ EOF
 chmod 0755 "$PKG_ROOT/DEBIAN/postinst" "$PKG_ROOT/DEBIAN/postrm"
 
 DEB_NAME="${APP_PACKAGE_NAME}_${VERSION}_${ARCH}.deb"
+rm -f "$OUTPUT_DIR/ant-browser_${VERSION}_${ARCH}.deb"
 if dpkg-deb --help 2>/dev/null | grep -q -- '--root-owner-group'; then
   dpkg-deb --root-owner-group --build "$PKG_ROOT" "$OUTPUT_DIR/$DEB_NAME" >/dev/null
 else

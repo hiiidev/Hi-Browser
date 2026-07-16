@@ -113,7 +113,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ant-browser-linux-${{ matrix.arch }}
+          name: hi-browser-linux-${{ matrix.arch }}
           path: |
             publish/output/*_${{ matrix.arch }}.deb
             publish/output/*-linux-${{ matrix.arch }}.tar.gz
@@ -141,4 +141,7 @@ jobs:
           if ! gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes || gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null
           fi
+          version="${TAG_NAME#v}"
+          gh release delete-asset "$TAG_NAME" "ant-browser_${version}_amd64.deb" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
+          gh release delete-asset "$TAG_NAME" "ant-browser_${version}_arm64.deb" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
           gh release upload "$TAG_NAME" release-artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
