@@ -12,6 +12,7 @@ on:
     - cron: "23 */6 * * *"
   workflow_dispatch:
 
+# Publishing the index branch requires repository Actions workflow write access.
 permissions:
   contents: write
 
