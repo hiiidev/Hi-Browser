@@ -120,7 +120,7 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release create "$TAG_NAME" --generate-notes || gh release view "$TAG_NAME" >/dev/null
+          if ! gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes || gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null
           fi
-          gh release upload "$TAG_NAME" release-assets/* --clobber
+          gh release upload "$TAG_NAME" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
