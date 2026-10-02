@@ -1,9 +1,37 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-02T12:47:19Z",
+  "generatedAt": "2026-10-02T22:19:40Z",
   "provider": "fingerprint-chromium-static",
   "sourceRepository": "adryfish/fingerprint-chromium",
   "releases": [
+    {
+      "id": 401859523,
+      "tagName": "150.0.7871.186",
+      "name": "150.0.7871.186",
+      "body": "Update to Chromium 150.0.7871.186\r\n\r\nThis release is for all platforms",
+      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/150.0.7871.186",
+      "publishedAt": "2026-10-02T14:02:29Z",
+      "prerelease": false,
+      "draft": false,
+      "assets": [
+        {
+          "id": 605720178,
+          "name": "ungoogled-chromium-150.0.7871.186-1-x86_64_linux.tar.xz",
+          "size": 145806232,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/150.0.7871.186/ungoogled-chromium-150.0.7871.186-1-x86_64_linux.tar.xz",
+          "contentType": "application/x-xz",
+          "publisherSha256": ""
+        },
+        {
+          "id": 605724683,
+          "name": "ungoogled-chromium_150.0.7871.186-1.1_windows_x64.zip",
+          "size": 193743241,
+          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/150.0.7871.186/ungoogled-chromium_150.0.7871.186-1.1_windows_x64.zip",
+          "contentType": "application/zip",
+          "publisherSha256": ""
+        }
+      ]
+    },
     {
       "id": 342454681,
       "tagName": "148.0.7778.215",
@@ -291,42 +319,6 @@
           "name": "ungoogled-chromium_133.0.6943.126-1_linux.tar.xz",
           "size": 130276784,
           "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/133.0.6943.126/ungoogled-chromium_133.0.6943.126-1_linux.tar.xz",
-          "contentType": "application/x-xz",
-          "publisherSha256": ""
-        }
-      ]
-    },
-    {
-      "id": 201346920,
-      "tagName": "132.0.6834.159",
-      "name": "132.0.6834.159",
-      "body": "Update to Chromium 132.0.6834.159\r\n\r\nThis release is for all platforms",
-      "htmlUrl": "https://github.com/adryfish/fingerprint-chromium/releases/tag/132.0.6834.159",
-      "publishedAt": "2025-02-20T06:42:42Z",
-      "prerelease": false,
-      "draft": false,
-      "assets": [
-        {
-          "id": 231781713,
-          "name": "ungoogled-chromium_132.0.6834.110-1.1_macos.dmg",
-          "size": 123261209,
-          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/132.0.6834.159/ungoogled-chromium_132.0.6834.110-1.1_macos.dmg",
-          "contentType": "application/x-apple-diskimage",
-          "publisherSha256": ""
-        },
-        {
-          "id": 231565001,
-          "name": "ungoogled-chromium_132.0.6834.159-1.1_windows_x64.zip",
-          "size": 384277805,
-          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/132.0.6834.159/ungoogled-chromium_132.0.6834.159-1.1_windows_x64.zip",
-          "contentType": "application/zip",
-          "publisherSha256": ""
-        },
-        {
-          "id": 230878493,
-          "name": "ungoogled-chromium_132.0.6834.159-1_linux.tar.xz",
-          "size": 128724600,
-          "downloadUrl": "https://github.com/adryfish/fingerprint-chromium/releases/download/132.0.6834.159/ungoogled-chromium_132.0.6834.159-1_linux.tar.xz",
           "contentType": "application/x-xz",
           "publisherSha256": ""
         }
